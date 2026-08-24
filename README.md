@@ -11,18 +11,18 @@
 
 - <h3>Clone this repository</h3>
 
-```
+```bash
     git clone https://github.com/003-aldienhw/PolyLife.git
 ```
 
 - <h3>Go to the root folder</h3>
 
-```
+```bash
     cd PolyLife
 ```
 
 - <h3>Run the game</h3>
 
-```
+```bash
     lovr PolyLife
 ```
