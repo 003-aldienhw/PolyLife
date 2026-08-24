@@ -1,7 +1,7 @@
 <h1 align="Center">PolyLife</h1>
 
 > 🚧 Still under development.
-<p>A 3d Low-poly survival game</p>
+<p>A 3d Low-poly survival game.</p>
 
 <h2 align="left">Description</h2>
 

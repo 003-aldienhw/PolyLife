@@ -27,25 +27,17 @@ local function grid(size, subdivisions)
 end
 
 local function terrain_fn(x, z)
-  return 15 * (lovr.math.noise(x * 0.05, z * 0.05) - 0.5)
-end
-
-local function water(x, z)
-  return 2 * (lovr.math.noise(x * 0.05, z * 0.05) - 0.5)
+  return 10 * (lovr.math.noise(x * 0.05, z * 0.05) - 0.5)
 end
 
 function lovr.load()
-  size = 100
+  size = 200
   world = lovr.physics.newWorld(0, -9.81, 0, false)
   lovr.graphics.setBackgroundColor(0x02b2f2)
   local vertices, water_vertices = grid(size, 100)
   for vi = 1, #vertices do
     local x,y,z = unpack(vertices[vi])
     vertices[vi][2] = terrain_fn(x, z)
-  end
-  for vi = 1, #water_vertices do
-    local x,y,z = unpack(water_vertices[vi])
-    water_vertices[vi][2] = water(x, z)
   end
   ground_mesh = lovr.graphics.newMesh(vertices)
   water_mesh = lovr.graphics.newMesh(water_vertices)
