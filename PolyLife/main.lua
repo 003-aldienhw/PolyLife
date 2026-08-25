@@ -41,11 +41,11 @@ local function grid(size, subdivisions)
   for z = -half, half - w_step + 0.001, w_step do
     for x = -half, half - w_step + 0.001, w_step do
       table.insert(water_vertices, {x, 0, z, "water"})
-      table.insert(water_vertices, {x, 0, z + step, "water"})
-      table.insert(water_vertices, {x + step, 0, z, "water"})
-      table.insert(water_vertices, {x, 0, z + step, "water"})
-      table.insert(water_vertices, {x + step, 0, z + step, "water"})
-      table.insert(water_vertices, {x + step, 0, z, "water"})
+      table.insert(water_vertices, {x, 0, z + w_step, "water"})
+      table.insert(water_vertices, {x + w_step, 0, z, "water"})
+      table.insert(water_vertices, {x, 0, z + w_step, "water"})
+      table.insert(water_vertices, {x + w_step, 0, z + w_step, "water"})
+      table.insert(water_vertices, {x + w_step, 0, z, "water"})
     end
   end
   return ground_vertices, water_vertices
@@ -57,8 +57,8 @@ end
 
 function lovr.load()
   terrain_size = 100
-  water_size = 200
-  thickness = -5
+  water_size = 150
+  thickness = -10
   world = lovr.physics.newWorld(0, -9.81, 0, false)
   lovr.graphics.setBackgroundColor(0x02b2f2)
   local ground_vertices = grid(terrain_size, 100)
