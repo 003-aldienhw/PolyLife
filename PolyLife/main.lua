@@ -12,7 +12,6 @@ local function grid(size, subdivisions)
     end
   end
   local water_vertices = {}
-  local step = size / (subdivisions - 1)
   for z = -size / 2, size / 2, step do
     for x = -size / 2, size / 2, step do
       table.insert(water_vertices, {x, 0, z})
@@ -31,26 +30,28 @@ local function terrain_fn(x, z)
 end
 
 function lovr.load()
-  size = 200
+  terrain_size = 200
+  water_size = 300
   world = lovr.physics.newWorld(0, -9.81, 0, false)
   lovr.graphics.setBackgroundColor(0x02b2f2)
-  local vertices, water_vertices = grid(size, 100)
+  local vertices = grid(terrain_size, 100)
+  local water_vertices = grid(water_size, 120)
   for vi = 1, #vertices do
     local x,y,z = unpack(vertices[vi])
     vertices[vi][2] = terrain_fn(x, z)
   end
   ground_mesh = lovr.graphics.newMesh(vertices)
   water_mesh = lovr.graphics.newMesh(water_vertices)
-  world:newTerrainCollider(size, terrain_fn)
+  world:newTerrainCollider(terrain_size, terrain_fn)
   box_colliders = {}
 end
 
 function lovr.update(dt)
   if lovr.timer.getTime() % 1 < dt then
     local collider = world:newBoxCollider(
-      lovr.math.randomNormal(size / 10, 0),
+      lovr.math.randomNormal(terrain_size / 10, 0),
       lovr.math.randomNormal(1, 20),
-      lovr.math.randomNormal(size / 10, 0),
+      lovr.math.randomNormal(terrain_size / 10, 0),
       1)
     table.insert(box_colliders, collider)
   end
