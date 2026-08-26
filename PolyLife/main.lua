@@ -40,12 +40,12 @@ local function grid(size, subdivisions)
   local w_step = size / (subdivisions - 1)
   for z = -half, half - w_step + 0.001, w_step do
     for x = -half, half - w_step + 0.001, w_step do
-      table.insert(water_vertices, {x, 0, z, "water"})
-      table.insert(water_vertices, {x, 0, z + w_step, "water"})
-      table.insert(water_vertices, {x + w_step, 0, z, "water"})
-      table.insert(water_vertices, {x, 0, z + w_step, "water"})
-      table.insert(water_vertices, {x + w_step, 0, z + w_step, "water"})
-      table.insert(water_vertices, {x + w_step, 0, z, "water"})
+      table.insert(water_vertices, {x, 0, z})
+      table.insert(water_vertices, {x, 0, z + w_step})
+      table.insert(water_vertices, {x + w_step, 0, z})
+      table.insert(water_vertices, {x, 0, z + w_step})
+      table.insert(water_vertices, {x + w_step, 0, z + w_step})
+      table.insert(water_vertices, {x + w_step, 0, z})
     end
   end
   return ground_vertices, water_vertices
@@ -55,28 +55,49 @@ local function terrain_fn(x, z)
   return 10 * (lovr.math.noise(x * 0.05, z * 0.05) - 0.5)
 end
 
+local function get_terrain_color(y, tag)
+  if tag == "bottom" then
+    return 0.2, 0.2, 0.2, 1.0
+  elseif tag and tag:sub(1,5) == "edge_" then
+    return 0.35, 0.25, 0.15, 1.0
+  end
+
+  if y > 2.0 then
+    return 0.55, 0.55, 0.58, 1.0
+  elseif y > 0.2 then
+    return 0.45, 0.30, 0.18, 1.0
+  else
+    return 0.18, 0.55, 0.22, 1.0
+  end
+end
+
 function lovr.load()
   terrain_size = 100
   water_size = 150
-  thickness = -10
+  world_bottom = -15
   world = lovr.physics.newWorld(0, -9.81, 0, false)
   lovr.graphics.setBackgroundColor(0x02b2f2)
-  local ground_vertices = grid(terrain_size, 100)
-  local _, water_vertices = grid(water_size, 120)
-  for vi = 1, #ground_vertices do
-    local x,y,z,tag = ground_vertices[vi][1], ground_vertices[vi][2], ground_vertices[vi][3], ground_vertices[vi][4]
-    if tag == "top" or tag:sub(1,5) == "edge_" then
-      ground_vertices[vi][2] = terrain_fn(x, z)
+  local vertex_format = {
+    { 'VertexPosition', 'vec3' },
+    { 'VertexColor', 'vec4' }
+  }
+  local raw_ground_vertices = grid(terrain_size, 100)
+  local water_vertices = grid(water_size, 120)
+  local ground_vertices = {}
+  for vi = 1, #raw_ground_vertices do
+    local x,y,z,tag = raw_ground_vertices[vi][1], raw_ground_vertices[vi][2], raw_ground_vertices[vi][3], raw_ground_vertices[vi][4]
+    if tag == "top" or (tag and tag:sub(1,5) == "edge_") then
+      y = terrain_fn(x, z)
+    elseif tag == "bottom" then
+      y = world_bottom
     end
-    if tag == "bottom" then
-      ground_vertices[vi][2] = thickness
-    end
-    ground_vertices[vi][4] = nil
+    local r, g, b, a = get_terrain_color(y, tag)
+    table.insert(ground_vertices, {x, y, z, r, g, b, a})
   end
   for vi = 1, #water_vertices do
     water_vertices[vi][4] = nil
   end
-  ground_mesh = lovr.graphics.newMesh(ground_vertices)
+  ground_mesh = lovr.graphics.newMesh(vertex_format, ground_vertices)
   water_mesh = lovr.graphics.newMesh(water_vertices)
   world:newTerrainCollider(terrain_size, terrain_fn)
   box_colliders = {}
@@ -101,7 +122,7 @@ function lovr.draw(pass)
     pass:cube(x, y, z, 1, angle, ax, ay, az)
   end
 
-  pass:setColor(0x029c1e)
+  pass:setColor(1, 1, 1)
   pass:draw(ground_mesh)
 
   pass:setColor(0x062cb8)
@@ -112,4 +133,5 @@ function lovr.draw(pass)
   pass:draw(ground_mesh)
   pass:setColor(0x01186e)
   pass:draw(water_mesh)
+  pass:setWireframe(false)
 end
