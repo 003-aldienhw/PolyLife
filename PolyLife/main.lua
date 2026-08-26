@@ -51,30 +51,49 @@ local function grid(size, subdivisions)
   return ground_vertices, water_vertices
 end
 
+terrain_size = 150
+water_size = 200
+
 local function terrain_fn(x, z)
-  return 10 * (lovr.math.noise(x * 0.05, z * 0.05) - 0.5)
+  local half = terrain_size / 2
+  local seabed_depth = -8.0
+  local falloff_start = 0.55
+  local nx = math.abs(x) / half
+  local nz = math.abs(z) / half
+  local dist = math.max(nx, nz)
+  local raw_y = 10 * (lovr.math.noise(x * 0.05, z * 0.05) - 0.5)
+
+  if dist > falloff_start then
+    local t = (dist - falloff_start) / (1.0 - falloff_start)
+    t = math.min(1.0, math.max(0.0, t))
+    local smooth_t = t * t * (3 - 2 * t)
+    return raw_y * (1 - smooth_t) + seabed_depth * smooth_t
+  end
+  return raw_y
 end
 
 local function get_terrain_color(y, tag)
   if tag == "bottom" then
-    return 0.2, 0.2, 0.2, 1.0
+    return 0.12, 0.12, 0.15, 1.0
   elseif tag and tag:sub(1,5) == "edge_" then
-    return 0.35, 0.25, 0.15, 1.0
+    return 0.20, 0.20, 0.22, 1.0
   end
 
-  if y > 2.0 then
+  if y > 2.5 then
     return 0.55, 0.55, 0.58, 1.0
-  elseif y > 0.2 then
+  elseif y > 0.4 then
     return 0.45, 0.30, 0.18, 1.0
-  else
+  elseif y > -0.2 then
     return 0.18, 0.55, 0.22, 1.0
+  elseif y > -2.0 then
+    return 0.76, 0.70, 0.50, 1.0
+  else
+    return 0.15, 0.25, 0.30, 1.0
   end
 end
 
 function lovr.load()
-  terrain_size = 100
-  water_size = 150
-  world_bottom = -15
+  world_bottom = -12
   world = lovr.physics.newWorld(0, -9.81, 0, false)
   lovr.graphics.setBackgroundColor(0x02b2f2)
   local vertex_format = {
