@@ -52,7 +52,7 @@ local function grid(size, subdivisions)
 end
 
 terrain_size = 150
-water_size = 200
+water_size = 160
 
 local function terrain_fn(x, z)
   local half = terrain_size / 2
@@ -61,7 +61,7 @@ local function terrain_fn(x, z)
   local nx = math.abs(x) / half
   local nz = math.abs(z) / half
   local dist = math.max(nx, nz)
-  local raw_y = 10 * (lovr.math.noise(x * 0.05, z * 0.05) - 0.5)
+  local raw_y = 7 * (lovr.math.noise(x * 0.05, z * 0.05) - 0.5)
 
   if dist > falloff_start then
     local t = (dist - falloff_start) / (1.0 - falloff_start)
@@ -79,12 +79,14 @@ local function get_terrain_color(y, tag)
     return 0.20, 0.20, 0.22, 1.0
   end
 
-  if y > 2.5 then
+  if y > 7.0 then
     return 0.55, 0.55, 0.58, 1.0
-  elseif y > 0.4 then
+  elseif y > 5.0 then
     return 0.45, 0.30, 0.18, 1.0
-  elseif y > -0.2 then
+  elseif y > 0.4 then
     return 0.18, 0.55, 0.22, 1.0
+  elseif y > -0.2 then
+    return 0.45, 0.30, 0.18, 1.0
   elseif y > -2.0 then
     return 0.76, 0.70, 0.50, 1.0
   else
@@ -93,15 +95,40 @@ local function get_terrain_color(y, tag)
 end
 
 function lovr.load()
-  world_bottom = -12
+  world_bottom = -9
   world = lovr.physics.newWorld(0, -9.81, 0, false)
-  lovr.graphics.setBackgroundColor(0x02b2f2)
+  fog_shader = lovr.graphics.newShader([[
+    uniform mat4 Model;
+    out vec3 viewPos;
+    out vec4 vertColor;
+    vec4 lovrmain() {
+      viewPos = (View * Model * VertexPosition).xyz;
+      vertColor = VertexColor;
+      return DefaultPosition;
+    }
+  ]], [[
+    in vec3 viewPos;
+    in vec4 vertColor;
+    uniform bool is_underwater;
+    vec4 lovrmain() {
+      vec4 baseColor = Color * vertColor;
+      if (is_underwater) {
+        float dist = length(viewPos);
+        float density = 0.12;
+        float fogAmount = 1.0 - exp(-dist * density);
+        fogAmount = clamp(fogAmount, 0.0, 1.0);
+        vec3 fogColor = vec3(0.02, 0.12, 0.25);
+        return vec4(mix(baseColor.rgb, fogColor, fogAmount), baseColor.a);
+      }
+      return baseColor;
+    }
+  ]])
   local vertex_format = {
     { 'VertexPosition', 'vec3' },
     { 'VertexColor', 'vec4' }
   }
   local raw_ground_vertices = grid(terrain_size, 100)
-  local water_vertices = grid(water_size, 120)
+  local raw_water_vertices = grid(water_size, 120)
   local ground_vertices = {}
   for vi = 1, #raw_ground_vertices do
     local x,y,z,tag = raw_ground_vertices[vi][1], raw_ground_vertices[vi][2], raw_ground_vertices[vi][3], raw_ground_vertices[vi][4]
@@ -113,11 +140,13 @@ function lovr.load()
     local r, g, b, a = get_terrain_color(y, tag)
     table.insert(ground_vertices, {x, y, z, r, g, b, a})
   end
-  for vi = 1, #water_vertices do
-    water_vertices[vi][4] = nil
+  local formatted_water_vertices = {}
+  for vi = 1, #raw_water_vertices do
+    local x, y, z = raw_water_vertices[vi][1], raw_water_vertices[vi][2], raw_water_vertices[vi][3]
+    table.insert(formatted_water_vertices, {x, y, z, 1.0, 1.0, 1.0, 1.0})
   end
   ground_mesh = lovr.graphics.newMesh(vertex_format, ground_vertices)
-  water_mesh = lovr.graphics.newMesh(water_vertices)
+  water_mesh = lovr.graphics.newMesh(vertex_format, formatted_water_vertices)
   world:newTerrainCollider(terrain_size, terrain_fn)
   box_colliders = {}
 end
@@ -129,23 +158,57 @@ function lovr.update(dt)
       lovr.math.randomNormal(1, 20),
       lovr.math.randomNormal(terrain_size / 10, 0),
       1)
+    collider:setMass(lovr.math.random(1, 10))
     table.insert(box_colliders, collider)
+  end
+  local fluid_density = 5.0
+  local gravity = 9.81
+  local box_size = 1.0
+  for _, collider in ipairs(box_colliders) do
+    local x, y, z = collider:getPosition()
+    local bottom = y - (box_size / 2)
+    if bottom < 0 then
+      local submerged = math.min(1.0, (0 - bottom) / box_size)
+      local bouyant_force = submerged * (box_size^3) * fluid_density * gravity
+      collider:applyForce(0, bouyant_force, 0)
+      local vx, vy, vz = collider:getLinearVelocity()
+      local drag = 2.0 * submerged
+      collider:applyForce(-vx * drag, -vy * drag, -vz * drag)
+      local ax, ay, az = collider:getAngularVelocity()
+      collider:applyTorque(-ax * drag, -ay * drag, az * drag)
+    end
   end
   world:update(dt)
 end
 
 function lovr.draw(pass)
-  pass:setColor(0x32a852)
+  local hx, hy, hz = lovr.headset.getPosition()
+  local underwater = hy < 0
+  if underwater then
+    lovr.graphics.setBackgroundColor(0.02, 0.10, 0.25)
+  else
+    lovr.graphics.setBackgroundColor(0x02b2f2)
+  end
+  pass:setShader(fog_shader)
+  pass:send('is_underwater', underwater)
   for _, collider in ipairs(box_colliders) do
     local x, y, z, angle, ax, ay, az = collider:getPose()
+    local mass = collider:getMass()
+    if mass < 5.0 then
+      pass:setColor(0.6, 0.4, 0.2)
+    else
+      pass:setColor(0.3, 0.3, 0.3)
+    end
     pass:cube(x, y, z, 1, angle, ax, ay, az)
   end
 
   pass:setColor(1, 1, 1)
   pass:draw(ground_mesh)
 
-  pass:setColor(0x062cb8)
+  pass:setColor(0.04, 0.17, 0.72, 0.7)
   pass:draw(water_mesh)
+
+  pass:setShader()
 
   pass:setWireframe(true)
   pass:setColor(0x022e0e)
@@ -153,4 +216,6 @@ function lovr.draw(pass)
   pass:setColor(0x01186e)
   pass:draw(water_mesh)
   pass:setWireframe(false)
+
+  pass:setShader()
 end
