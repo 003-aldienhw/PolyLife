@@ -61,7 +61,7 @@ local function terrain_fn(x, z)
   local nx = math.abs(x) / half
   local nz = math.abs(z) / half
   local dist = math.max(nx, nz)
-  local raw_y = 7 * (lovr.math.noise(x * 0.05, z * 0.05) - 0.5)
+  local raw_y = 5 * (lovr.math.noise(x * 0.05, z * 0.05) - 0.5)
 
   if dist > falloff_start then
     local t = (dist - falloff_start) / (1.0 - falloff_start)
@@ -98,24 +98,22 @@ function lovr.load()
   world_bottom = -9
   world = lovr.physics.newWorld(0, -9.81, 0, false)
   fog_shader = lovr.graphics.newShader([[
-    uniform mat4 Model;
     out vec3 viewPos;
     out vec4 vertColor;
     vec4 lovrmain() {
-      viewPos = (View * Model * VertexPosition).xyz;
+      viewPos = (Transform * VertexPosition).xyz;
       vertColor = VertexColor;
       return DefaultPosition;
     }
   ]], [[
     in vec3 viewPos;
     in vec4 vertColor;
-    uniform bool is_underwater;
+    uniform float fogDensity;
     vec4 lovrmain() {
       vec4 baseColor = Color * vertColor;
-      if (is_underwater) {
+      if (fogDensity > 0.0) {
         float dist = length(viewPos);
-        float density = 0.12;
-        float fogAmount = 1.0 - exp(-dist * density);
+        float fogAmount = 1.0 - exp(-dist * fogDensity);
         fogAmount = clamp(fogAmount, 0.0, 1.0);
         vec3 fogColor = vec3(0.02, 0.12, 0.25);
         return vec4(mix(baseColor.rgb, fogColor, fogAmount), baseColor.a);
@@ -175,7 +173,7 @@ function lovr.update(dt)
       local drag = 2.0 * submerged
       collider:applyForce(-vx * drag, -vy * drag, -vz * drag)
       local ax, ay, az = collider:getAngularVelocity()
-      collider:applyTorque(-ax * drag, -ay * drag, az * drag)
+      collider:applyTorque(-ax * drag, -ay * drag, -az * drag)
     end
   end
   world:update(dt)
@@ -189,8 +187,9 @@ function lovr.draw(pass)
   else
     lovr.graphics.setBackgroundColor(0x02b2f2)
   end
+  local density_value = underwater and 0.15 or 0.0
   pass:setShader(fog_shader)
-  pass:send('is_underwater', underwater)
+  pass:send('fogDensity', density_value)
   for _, collider in ipairs(box_colliders) do
     local x, y, z, angle, ax, ay, az = collider:getPose()
     local mass = collider:getMass()
