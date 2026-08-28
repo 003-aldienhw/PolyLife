@@ -184,19 +184,24 @@ function lovr.update(dt)
   local fluid_density = 5.0
   local gravity = 9.81
   local box_size = 1.0
+  local half_bounds = water_size / 2
   for _, collider in ipairs(box_colliders) do
     local x, y, z = collider:getPosition()
     local bottom = y - (box_size / 2)
-    local local_water_level = get_wave_height(x, y, current_time)
-    if bottom < local_water_level then
-      local submerged = math.min(1.0, (local_water_level - bottom) / box_size)
-      local bouyant_force = submerged * (box_size^3) * fluid_density * gravity
-      collider:applyForce(0, bouyant_force, 0)
-      local vx, vy, vz = collider:getLinearVelocity()
-      local drag = 2.0 * submerged
-      collider:applyForce(-vx * drag, -vy * drag, -vz * drag)
-      local ax, ay, az = collider:getAngularVelocity()
-      collider:applyTorque(-ax * drag, -ay * drag, -az * drag)
+    if math.abs(x) <= half_bounds and math.abs(z) <= half_bounds then
+      local local_water_level = get_wave_height(x, y, current_time)
+      if bottom < local_water_level then
+        local submerged = math.min(1.0, (local_water_level - bottom) / box_size)
+        local bouyant_force = submerged * (box_size^3) * fluid_density * gravity
+        collider:applyForce(0, bouyant_force, 0)
+
+        local vx, vy, vz = collider:getLinearVelocity()
+        local drag = 2.0 * submerged
+        collider:applyForce(-vx * drag, -vy * drag, -vz * drag)
+
+        local ax, ay, az = collider:getAngularVelocity()
+        collider:applyTorque(-ax * drag, -ay * drag, -az * drag)
+      end
     end
   end
   world:update(dt)
@@ -204,8 +209,11 @@ end
 
 function lovr.draw(pass)
   local hx, hy, hz = lovr.headset.getPosition()
-  local underwater = hy < 0
   local current_time = lovr.timer.getTime()
+  local half_bounds = water_size / 2
+  local inside_water_borders = math.abs(hx) <= half_bounds and math.abs(hz) <= half_bounds
+  local wave_height_at_camera = get_wave_height(hx, hz, current_time)
+  local underwater = inside_water_borders and (hy < wave_height_at_camera)
   if underwater then
     lovr.graphics.setBackgroundColor(0.02, 0.10, 0.25)
   else
