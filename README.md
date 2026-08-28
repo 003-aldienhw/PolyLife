@@ -7,7 +7,7 @@
 
 <p>This is a game I created to learn about LÖVR (Lua Framework). This project still under development, not fully done yet. But don't worry, I will try to finish it.</p>
 
-<p>For further information about LÖVR, visit its [official website](https://lovr.org).</p>
+<p>For further information about LÖVR, visit its official website: https://lovr.org.</p>
 
 <h2 align="left">How to run (If interested)</h2>
 
