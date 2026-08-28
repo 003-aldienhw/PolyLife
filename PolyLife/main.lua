@@ -95,7 +95,11 @@ local function get_terrain_color(y, tag)
   end
 end
 
-local fog_shader
+local function get_wave_height(x, z, time)
+  return math.sin(x * 0.5 + time) * 0.3 + math.cos(z * 0.4 + time * 0.8) * 0.3
+end
+
+local master_shader
 local ground_mesh
 local water_mesh
 local box_colliders
@@ -106,22 +110,30 @@ function lovr.load()
     allowSleep = false
   })
   world:setGravity(0, -9.81, 0)
-  fog_shader = lovr.graphics.newShader([[
-    out vec3 viewPos;
+  master_shader = lovr.graphics.newShader([[
+    out vec3 worldPos;
     out vec4 vertColor;
+    uniform float time;
+    uniform float is_water;
     vec4 lovrmain() {
-      viewPos = (Transform * VertexPosition).xyz;
+      vec3 pos = VertexPosition.xyz;
+      
+      if (is_water > 0.5) {
+        pos.y += sin(pos.x * 0.5 + time) * 0.3 + cos(pos.z * 0.4 + time * 0.8) * 0.3;
+      }
+      worldPos = (Transform * vec4(pos, 1.0)).xyz;
       vertColor = VertexColor;
-      return DefaultPosition;
+      return Projection * View * vec4(worldPos, 1.0);
     }
   ]], [[
-    in vec3 viewPos;
+    in vec3 worldPos;
     in vec4 vertColor;
     uniform float fogDensity;
+    uniform vec3 cameraPos;
     vec4 lovrmain() {
       vec4 baseColor = Color * vertColor;
       if (fogDensity > 0.0) {
-        float dist = length(viewPos);
+        float dist = distance(worldPos, cameraPos);
         float fogAmount = 1.0 - exp(-dist * fogDensity);
         fogAmount = clamp(fogAmount, 0.0, 1.0);
         vec3 fogColor = vec3(0.02, 0.12, 0.25);
@@ -159,6 +171,7 @@ function lovr.load()
 end
 
 function lovr.update(dt)
+  local current_time = lovr.timer.getTime()
   if lovr.timer.getTime() % 1 < dt then
     local collider = world:newBoxCollider(
       lovr.math.randomNormal(terrain_size / 10, 0),
@@ -174,8 +187,9 @@ function lovr.update(dt)
   for _, collider in ipairs(box_colliders) do
     local x, y, z = collider:getPosition()
     local bottom = y - (box_size / 2)
-    if bottom < 0 then
-      local submerged = math.min(1.0, (0 - bottom) / box_size)
+    local local_water_level = get_wave_height(x, y, current_time)
+    if bottom < local_water_level then
+      local submerged = math.min(1.0, (local_water_level - bottom) / box_size)
       local bouyant_force = submerged * (box_size^3) * fluid_density * gravity
       collider:applyForce(0, bouyant_force, 0)
       local vx, vy, vz = collider:getLinearVelocity()
@@ -191,14 +205,18 @@ end
 function lovr.draw(pass)
   local hx, hy, hz = lovr.headset.getPosition()
   local underwater = hy < 0
+  local current_time = lovr.timer.getTime()
   if underwater then
     lovr.graphics.setBackgroundColor(0.02, 0.10, 0.25)
   else
     lovr.graphics.setBackgroundColor(0x02b2f2)
   end
-  local density_value = underwater and 0.15 or 0.0
-  pass:setShader(fog_shader)
-  pass:send('fogDensity', density_value)
+  pass:setShader(master_shader)
+  pass:send('time', current_time)
+  pass:send('cameraPos', {hx, hy, hz})
+  pass:send('fogDensity', underwater and 0.15 or 0.0)
+
+  pass:send('is_water', 0.0)
   for _, collider in ipairs(box_colliders) do
     local x, y, z, angle, ax, ay, az = collider:getPose()
     local mass = collider:getMass()
@@ -213,14 +231,16 @@ function lovr.draw(pass)
   pass:setColor(1, 1, 1)
   pass:draw(ground_mesh)
 
+  pass:send('is_water', 1.0)
   pass:setColor(0.04, 0.17, 0.72, 0.7)
   pass:draw(water_mesh)
 
-  pass:setShader()
-
   pass:setWireframe(true)
+  pass:send('is_water', 0.0)
   pass:setColor(0x022e0e)
   pass:draw(ground_mesh)
+
+  pass:send('is_water', 1.0)
   pass:setColor(0x01186e)
   pass:draw(water_mesh)
   pass:setWireframe(false)
