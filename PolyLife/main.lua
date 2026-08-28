@@ -51,8 +51,9 @@ local function grid(size, subdivisions)
   return ground_vertices, water_vertices
 end
 
-terrain_size = 150
-water_size = 160
+local world
+local terrain_size = 150
+local water_size = 160
 
 local function terrain_fn(x, z)
   local half = terrain_size / 2
@@ -94,9 +95,17 @@ local function get_terrain_color(y, tag)
   end
 end
 
+local fog_shader
+local ground_mesh
+local water_mesh
+local box_colliders
+
 function lovr.load()
-  world_bottom = -9
-  world = lovr.physics.newWorld(0, -9.81, 0, false)
+  local world_bottom = -9
+  world = lovr.physics.newWorld({
+    allowSleep = false
+  })
+  world:setGravity(0, -9.81, 0)
   fog_shader = lovr.graphics.newShader([[
     out vec3 viewPos;
     out vec4 vertColor;
