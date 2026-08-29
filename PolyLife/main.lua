@@ -1,24 +1,24 @@
-local function grid(size, subdivisions)
-  local ground_vertices = {}
+local function generate_terrain_vertices(size, subdivisions)
+  local vertices = {}
   local step = size / (subdivisions - 1)
   local half = size / 2
   for z = -half, half - step + 0.001, step do
     for x = -half, half - step + 0.001, step do
-      table.insert(ground_vertices, {x, 0, z, "top"})
-      table.insert(ground_vertices, {x, 0, z + step, "top"})
-      table.insert(ground_vertices, {x + step, 0, z, "top"})
-      table.insert(ground_vertices, {x, 0, z + step, "top"})
-      table.insert(ground_vertices, {x + step, 0, z + step, "top"})
-      table.insert(ground_vertices, {x + step, 0, z, "top"})
+      table.insert(vertices, {x, 0, z, "top"})
+      table.insert(vertices, {x, 0, z + step, "top"})
+      table.insert(vertices, {x + step, 0, z, "top"})
+      table.insert(vertices, {x, 0, z + step, "top"})
+      table.insert(vertices, {x + step, 0, z + step, "top"})
+      table.insert(vertices, {x + step, 0, z, "top"})
     end
   end
   local function add_walls(x1, z1, x2, z2, label)
-    table.insert(ground_vertices, {x1, 0, z1, label})
-    table.insert(ground_vertices, {x1, 0, z1, "bottom"})
-    table.insert(ground_vertices, {x2, 0, z2, label})
-    table.insert(ground_vertices, {x1, 0, z1, "bottom"})
-    table.insert(ground_vertices, {x2, 0, z2, "bottom"})
-    table.insert(ground_vertices, {x2, 0, z2, label})
+    table.insert(vertices, {x1, 0, z1, label})
+    table.insert(vertices, {x1, 0, z1, "bottom"})
+    table.insert(vertices, {x2, 0, z2, label})
+    table.insert(vertices, {x1, 0, z1, "bottom"})
+    table.insert(vertices, {x2, 0, z2, "bottom"})
+    table.insert(vertices, {x2, 0, z2, label})
   end
   for i = -half, half - step + 0.001, step do
     add_walls(i, -half, i + step, -half, "edge_z_min")
@@ -28,27 +28,32 @@ local function grid(size, subdivisions)
   end
   for z = -half, half - step + 0.001, step do
     for x = -half, half - step + 0.001, step do
-      table.insert(ground_vertices, {x, 0, z, "bottom"})
-      table.insert(ground_vertices, {x, 0, z + step, "bottom"})
-      table.insert(ground_vertices, {x + step, 0, z, "bottom"})
-      table.insert(ground_vertices, {x, 0, z + step, "bottom"})
-      table.insert(ground_vertices, {x + step, 0, z + step, "bottom"})
-      table.insert(ground_vertices, {x + step, 0, z, "bottom"})
+      table.insert(vertices, {x, 0, z, "bottom"})
+      table.insert(vertices, {x, 0, z + step, "bottom"})
+      table.insert(vertices, {x + step, 0, z, "bottom"})
+      table.insert(vertices, {x, 0, z + step, "bottom"})
+      table.insert(vertices, {x + step, 0, z + step, "bottom"})
+      table.insert(vertices, {x + step, 0, z, "bottom"})
     end
   end
-  local water_vertices = {}
+  return vertices
+end
+
+local function generate_water_vertices(size, subdivisions)
+  local vertices = {}
   local w_step = size / (subdivisions - 1)
+  local half = size / 2
   for z = -half, half - w_step + 0.001, w_step do
     for x = -half, half - w_step + 0.001, w_step do
-      table.insert(water_vertices, {x, 0, z})
-      table.insert(water_vertices, {x, 0, z + w_step})
-      table.insert(water_vertices, {x + w_step, 0, z})
-      table.insert(water_vertices, {x, 0, z + w_step})
-      table.insert(water_vertices, {x + w_step, 0, z + w_step})
-      table.insert(water_vertices, {x + w_step, 0, z})
+      table.insert(vertices, {x, 0, z})
+      table.insert(vertices, {x, 0, z + w_step})
+      table.insert(vertices, {x + w_step, 0, z})
+      table.insert(vertices, {x, 0, z + w_step})
+      table.insert(vertices, {x + w_step, 0, z + w_step})
+      table.insert(vertices, {x + w_step, 0, z})
     end
   end
-  return ground_vertices, water_vertices
+  return vertices
 end
 
 local world
@@ -191,8 +196,8 @@ function lovr.load()
     { 'VertexPosition', 'vec3' },
     { 'VertexColor', 'vec4' }
   }
-  local raw_ground_vertices = grid(terrain_size, grid_subdivision)
-  local raw_water_vertices = grid(water_size, grid_subdivision)
+  local raw_ground_vertices = generate_terrain_vertices(terrain_size, grid_subdivision)
+  local raw_water_vertices = generate_water_vertices(water_size, grid_subdivision)
   local ground_vertices = {}
   for vi = 1, #raw_ground_vertices do
     local x,y,z,tag = raw_ground_vertices[vi][1], raw_ground_vertices[vi][2], raw_ground_vertices[vi][3], raw_ground_vertices[vi][4]
@@ -211,7 +216,7 @@ function lovr.load()
   end
   ground_mesh = lovr.graphics.newMesh(vertex_format, ground_vertices)
   water_mesh = lovr.graphics.newMesh(vertex_format, formatted_water_vertices)
-  world:newTerrainCollider(terrain_size, physical_terrain_fn)
+  world:newMeshCollider(ground_mesh)
   box_colliders = {}
 end
 
@@ -234,7 +239,7 @@ function lovr.update(dt)
     local x, y, z = collider:getPosition()
     local bottom = y - (box_size / 2)
     if math.abs(x) <= half_bounds and math.abs(z) <= half_bounds then
-      local local_water_level = physical_water_height(x, y, current_time)
+      local local_water_level = physical_water_height(x, z, current_time)
       if bottom < local_water_level then
         local submerged = math.min(1.0, (local_water_level - bottom) / box_size)
         local bouyant_force = submerged * (box_size^3) * fluid_density * gravity
@@ -287,16 +292,6 @@ function lovr.draw(pass)
   pass:send('is_water', 1.0)
   pass:setColor(0.06, 0.25, 0.8, 0.8)
   pass:draw(water_mesh)
-
-  pass:setWireframe(true)
-  pass:send('is_water', 0.0)
-  pass:setColor(0x022e0e)
-  pass:draw(ground_mesh)
-
-  pass:send('is_water', 1.0)
-  pass:setColor(0x01186e)
-  pass:draw(water_mesh)
-  pass:setWireframe(false)
 
   pass:setShader()
 end
