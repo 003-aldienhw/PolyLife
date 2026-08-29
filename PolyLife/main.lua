@@ -54,23 +54,60 @@ end
 local world
 local terrain_size = 150
 local water_size = 160
+local grid_subdivision = 40
 
-local function terrain_fn(x, z)
+local function raw_terrain_fn(x, z)
   local half = terrain_size / 2
   local seabed_depth = -8.0
   local falloff_start = 0.55
-  local nx = math.abs(x) / half
-  local nz = math.abs(z) / half
-  local dist = math.max(nx, nz)
+  local dist = math.max(math.abs(x) / half, math.abs(z) / half)
   local raw_y = 5 * (lovr.math.noise(x * 0.05, z * 0.05) - 0.5)
 
   if dist > falloff_start then
-    local t = (dist - falloff_start) / (1.0 - falloff_start)
-    t = math.min(1.0, math.max(0.0, t))
+    local t = math.min(1.0, math.max(0.0, (dist - falloff_start) / (1.0 - falloff_start)))
     local smooth_t = t * t * (3 - 2 * t)
     return raw_y * (1 - smooth_t) + seabed_depth * smooth_t
   end
   return raw_y
+end
+
+local function raw_water_height(x, z, time)
+  return math.sin(x * 0.5 + time) * 0.3 + math.cos(z * 0.4 + time * 0.8) * 0.3
+end
+
+local function get_triangle_height(x, z, size, subs, height_fn, time)
+  local half = size / 2
+  local step = size / (subs - 1)
+  local lx = math.max(0, math.min((x + half) / step, subs - 1))
+  local lz = math.max(0, math.min((z + half) / step, subs - 1))
+  local x0, z0 = math.floor(lx), math.floor(lz)
+  if x0 >= subs - 1 then
+    x0 = subs - 2
+  end
+  if z0 >= subs -1 then
+    z0 = subs - 2
+  end
+
+  local u, v = lx - x0, lz - z0
+  local px0, pz0 = -half + x0 * step, -half + z0 * step
+  local px1, pz1 = -half + (x0 + 1) * step, -half + (z0 + 1) * step
+  local h00 = height_fn(px0, pz0, time)
+  local h10 = height_fn(px1, pz0, time)
+  local h01 = height_fn(px0, pz1, time)
+  local h11 = height_fn(px1, pz1, time)
+  
+  if u + v <= 1.0 then
+    return h00 + (h10 - h00) * u + (h01 - h00) * v
+  else
+    return h11 + (h01 - h11) * (1.0 - u) + (h10 - h11) * (1.0 - v)
+  end
+end
+
+local function physical_terrain_fn(x, z)
+  return get_triangle_height(x, z, terrain_size, grid_subdivision, raw_terrain_fn)
+end
+local function physical_water_height(x, z, time)
+  return get_triangle_height(x, z, water_size, grid_subdivision, raw_water_height, time)
 end
 
 local function get_terrain_color(y, tag)
@@ -95,10 +132,6 @@ local function get_terrain_color(y, tag)
   end
 end
 
-local function get_wave_height(x, z, time)
-  return math.sin(x * 0.5 + time) * 0.3 + math.cos(z * 0.4 + time * 0.8) * 0.3
-end
-
 local master_shader
 local ground_mesh
 local water_mesh
@@ -117,7 +150,6 @@ function lovr.load()
     uniform float is_water;
     vec4 lovrmain() {
       vec3 pos = VertexPosition.xyz;
-      
       if (is_water > 0.5) {
         pos.y += sin(pos.x * 0.5 + time) * 0.3 + cos(pos.z * 0.4 + time * 0.8) * 0.3;
       }
@@ -130,12 +162,25 @@ function lovr.load()
     in vec4 vertColor;
     uniform float fogDensity;
     uniform vec3 cameraPos;
+    uniform float is_water;
     vec4 lovrmain() {
-      vec4 baseColor = Color * vertColor;
+      vec3 dx = dFdx(worldPos);
+      vec3 dy = dFdy(worldPos);
+      vec3 faceNormal = normalize(cross(dx, dy));
+      vec3 sunDirection = normalize(vec3(0.5, 1.0, 0.4));
+      float diffuse = max(dot(faceNormal, sunDirection), 0.0);
+      float light = 0.3 + (diffuse * 0.7);
+      vec4 baseColor = vec4((Color.rgb * vertColor.rgb) * light, Color.a * vertColor.a);
+      if (is_water > 0.5) {
+        vec3 viewDir = normalize(cameraPos - worldPos);
+        vec3 reflectDir = reflect(-sunDirection, faceNormal);
+        float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
+        baseColor.rgb += vec3(0.6, 0.8, 1.0) * spec * 0.9;
+        baseColor.a = 0.85;
+      }
       if (fogDensity > 0.0) {
         float dist = distance(worldPos, cameraPos);
-        float fogAmount = 1.0 - exp(-dist * fogDensity);
-        fogAmount = clamp(fogAmount, 0.0, 1.0);
+        float fogAmount = clamp(1.0 - exp(-dist * fogDensity), 0.0, 1.0);
         vec3 fogColor = vec3(0.02, 0.12, 0.25);
         return vec4(mix(baseColor.rgb, fogColor, fogAmount), baseColor.a);
       }
@@ -146,13 +191,13 @@ function lovr.load()
     { 'VertexPosition', 'vec3' },
     { 'VertexColor', 'vec4' }
   }
-  local raw_ground_vertices = grid(terrain_size, 100)
-  local raw_water_vertices = grid(water_size, 120)
+  local raw_ground_vertices = grid(terrain_size, grid_subdivision)
+  local raw_water_vertices = grid(water_size, grid_subdivision)
   local ground_vertices = {}
   for vi = 1, #raw_ground_vertices do
     local x,y,z,tag = raw_ground_vertices[vi][1], raw_ground_vertices[vi][2], raw_ground_vertices[vi][3], raw_ground_vertices[vi][4]
     if tag == "top" or (tag and tag:sub(1,5) == "edge_") then
-      y = terrain_fn(x, z)
+      y = raw_terrain_fn(x, z)
     elseif tag == "bottom" then
       y = world_bottom
     end
@@ -166,13 +211,13 @@ function lovr.load()
   end
   ground_mesh = lovr.graphics.newMesh(vertex_format, ground_vertices)
   water_mesh = lovr.graphics.newMesh(vertex_format, formatted_water_vertices)
-  world:newTerrainCollider(terrain_size, terrain_fn)
+  world:newTerrainCollider(terrain_size, physical_terrain_fn)
   box_colliders = {}
 end
 
 function lovr.update(dt)
   local current_time = lovr.timer.getTime()
-  if lovr.timer.getTime() % 1 < dt then
+  if current_time % 1 < dt then
     local collider = world:newBoxCollider(
       lovr.math.randomNormal(terrain_size / 10, 0),
       lovr.math.randomNormal(1, 20),
@@ -189,7 +234,7 @@ function lovr.update(dt)
     local x, y, z = collider:getPosition()
     local bottom = y - (box_size / 2)
     if math.abs(x) <= half_bounds and math.abs(z) <= half_bounds then
-      local local_water_level = get_wave_height(x, y, current_time)
+      local local_water_level = physical_water_height(x, y, current_time)
       if bottom < local_water_level then
         local submerged = math.min(1.0, (local_water_level - bottom) / box_size)
         local bouyant_force = submerged * (box_size^3) * fluid_density * gravity
@@ -211,9 +256,9 @@ function lovr.draw(pass)
   local hx, hy, hz = lovr.headset.getPosition()
   local current_time = lovr.timer.getTime()
   local half_bounds = water_size / 2
-  local inside_water_borders = math.abs(hx) <= half_bounds and math.abs(hz) <= half_bounds
-  local wave_height_at_camera = get_wave_height(hx, hz, current_time)
-  local underwater = inside_water_borders and (hy < wave_height_at_camera)
+  local inside_water = math.abs(hx) <= half_bounds and math.abs(hz) <= half_bounds
+  local wave_height = physical_water_height(hx, hz, current_time)
+  local underwater = inside_water and (hy < wave_height)
   if underwater then
     lovr.graphics.setBackgroundColor(0.02, 0.10, 0.25)
   else
@@ -240,7 +285,7 @@ function lovr.draw(pass)
   pass:draw(ground_mesh)
 
   pass:send('is_water', 1.0)
-  pass:setColor(0.04, 0.17, 0.72, 0.7)
+  pass:setColor(0.06, 0.25, 0.8, 0.8)
   pass:draw(water_mesh)
 
   pass:setWireframe(true)
