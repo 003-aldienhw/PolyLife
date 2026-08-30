@@ -108,9 +108,6 @@ local function get_triangle_height(x, z, size, subs, height_fn, time)
   end
 end
 
-local function physical_terrain_fn(x, z)
-  return get_triangle_height(x, z, terrain_size, grid_subdivision, raw_terrain_fn)
-end
 local function physical_water_height(x, z, time)
   return get_triangle_height(x, z, water_size, grid_subdivision, raw_water_height, time)
 end
