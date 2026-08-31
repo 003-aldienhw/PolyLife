@@ -116,21 +116,21 @@ local function get_terrain_color(y, tag)
   if tag == "bottom" then
     return 0.12, 0.12, 0.15, 1.0
   elseif tag and tag:sub(1,5) == "edge_" then
-    return 0.20, 0.20, 0.22, 1.0
+    return 0.25, 0.22, 0.20, 1.0
   end
 
-  if y > 7.0 then
-    return 0.55, 0.55, 0.58, 1.0
-  elseif y > 5.0 then
-    return 0.45, 0.30, 0.18, 1.0
-  elseif y > 0.4 then
-    return 0.18, 0.55, 0.22, 1.0
-  elseif y > -0.2 then
-    return 0.45, 0.30, 0.18, 1.0
-  elseif y > -2.0 then
-    return 0.76, 0.70, 0.50, 1.0
+  if y > 6.0 then
+    return 0.85, 0.88, 0.90, 1.0
+  elseif y > 4.0 then
+    return 0.50, 0.52, 0.55, 1.0
+  elseif y > 0.5 then
+    return 0.25, 0.65, 0.30, 1.0
+  elseif y > -0.5 then
+    return 0.80, 0.75, 0.55, 1.0
+  elseif y > -3.0 then
+    return 0.70, 0.65, 0.45, 1.0
   else
-    return 0.15, 0.25, 0.30, 1.0
+    return 0.30, 0.45, 0.55, 1.0
   end
 end
 
@@ -169,15 +169,15 @@ function lovr.load()
       vec3 dx = dFdx(worldPos);
       vec3 dy = dFdy(worldPos);
       vec3 faceNormal = normalize(cross(dx, dy));
-      vec3 sunDirection = normalize(vec3(0.5, 1.0, 0.4));
+      vec3 sunDirection = normalize(vec3(0.6, 1.0, 0.4));
       float diffuse = max(dot(faceNormal, sunDirection), 0.0);
-      float light = 0.3 + (diffuse * 0.7);
+      float light = 0.2 + (diffuse * 0.8);
       vec4 baseColor = vec4((Color.rgb * vertColor.rgb) * light, Color.a * vertColor.a);
       if (is_water > 0.5) {
         vec3 viewDir = normalize(cameraPos - worldPos);
         vec3 reflectDir = reflect(-sunDirection, faceNormal);
-        float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
-        baseColor.rgb += vec3(0.6, 0.8, 1.0) * spec * 0.9;
+        float spec = pow(max(dot(viewDir, reflectDir), 0.0), 48.0);
+        baseColor.rgb += vec3(0.7, 0.9, 1.0) * spec * 1.2;
         baseColor.a = 0.85;
       }
       if (fogDensity > 0.0) {
@@ -196,20 +196,32 @@ function lovr.load()
   local raw_ground_vertices = generate_terrain_vertices(terrain_size, grid_subdivision)
   local raw_water_vertices = generate_water_vertices(water_size, grid_subdivision)
   local ground_vertices = {}
-  for vi = 1, #raw_ground_vertices do
-    local x,y,z,tag = raw_ground_vertices[vi][1], raw_ground_vertices[vi][2], raw_ground_vertices[vi][3], raw_ground_vertices[vi][4]
-    if tag == "top" or (tag and tag:sub(1,5) == "edge_") then
-      y = raw_terrain_fn(x, z)
-    elseif tag == "bottom" then
-      y = world_bottom
+  for i = 1, #raw_ground_vertices, 3 do
+    local v1 = raw_ground_vertices[i]
+    local v2 = raw_ground_vertices[i + 1]
+    local v3 = raw_ground_vertices[i + 2]
+
+    local function get_y(v)
+      if v[4] == "top" or (v[4] and v[4]:sub(1,5) == "edge_") then
+        return raw_terrain_fn(v[1], v[3])
+      elseif v[4] == "bottom" then
+        return world_bottom
+      end
+      return 0
     end
-    local r, g, b, a = get_terrain_color(y, tag)
-    table.insert(ground_vertices, {x, y, z, r, g, b, a})
+
+    local y1, y2, y3 = get_y(v1), get_y(v2), get_y(v3)
+    local avg_y = (y1+ y2 + y3) / 3.0
+    local r, g, b, a = get_terrain_color(avg_y, v1[4])
+
+    table.insert(ground_vertices, {v1[1], y1, v1[3], r, g, b, a})
+    table.insert(ground_vertices, {v2[1], y2, v2[3], r, g, b, a})
+    table.insert(ground_vertices, {v3[1], y3, v3[3], r, g, b, a})
   end
   local formatted_water_vertices = {}
-  for vi = 1, #raw_water_vertices do
-    local x, y, z = raw_water_vertices[vi][1], raw_water_vertices[vi][2], raw_water_vertices[vi][3]
-    table.insert(formatted_water_vertices, {x, y, z, 1.0, 1.0, 1.0, 1.0})
+  for i = 1, #raw_water_vertices do
+    local v = raw_water_vertices[i]
+    table.insert(formatted_water_vertices, {v[1], v[2], v[3], 1.0, 1.0, 1.0, 1.0})
   end
   ground_mesh = lovr.graphics.newMesh(vertex_format, ground_vertices)
   water_mesh = lovr.graphics.newMesh(vertex_format, formatted_water_vertices)
