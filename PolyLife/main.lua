@@ -1,39 +1,74 @@
-local function generate_terrain_vertices(size, subdivisions)
-  local vertices = {}
-  local step = size / (subdivisions - 1)
+local function create_jittered_grid(size, subs)
+  local step = size / (subs - 1)
   local half = size / 2
-  for z = -half, half - step + 0.001, step do
-    for x = -half, half - step + 0.001, step do
-      table.insert(vertices, {x, 0, z, "top"})
-      table.insert(vertices, {x, 0, z + step, "top"})
-      table.insert(vertices, {x + step, 0, z, "top"})
-      table.insert(vertices, {x, 0, z + step, "top"})
-      table.insert(vertices, {x + step, 0, z + step, "top"})
-      table.insert(vertices, {x + step, 0, z, "top"})
+  local pts = {}
+
+  lovr.math.setRandomSeed(1337)
+
+  for z = 1, subs do
+    pts[z] = {}
+    for x = 1, subs do
+      local px = -half + (x - 1) * step
+      local pz = -half + (z - 1) * step
+
+      if x > 1 and x < subs and z > 1 and z < subs then
+        local jitter = step * 0.45
+        px = px + (lovr.math.random() * 2 - 1) * jitter
+        pz = pz + (lovr.math.random() * 2 - 1) * jitter
+      end
+
+      pts[z][x] = {px, pz}
     end
   end
-  local function add_walls(x1, z1, x2, z2, label)
-    table.insert(vertices, {x1, 0, z1, label})
-    table.insert(vertices, {x1, 0, z1, "bottom"})
-    table.insert(vertices, {x2, 0, z2, label})
-    table.insert(vertices, {x1, 0, z1, "bottom"})
-    table.insert(vertices, {x2, 0, z2, "bottom"})
-    table.insert(vertices, {x2, 0, z2, label})
+  return pts
+end
+
+local function generate_terrain_vertices(size, subdivisions)
+  local vertices = {}
+  local pts = create_jittered_grid(size, subdivisions)
+  for z = 1, subdivisions - 1 do
+    for x = 1, subdivisions - 1 do
+      local p00 = pts[z][x]; local p10 = pts[z][x + 1]
+      local p01 = pts[z + 1][x]; local p11 = pts[z + 1][x + 1]
+
+      table.insert(vertices, {p00[1], 0, p00[2], "top"})
+      table.insert(vertices, {p01[1], 0, p01[2], "top"})
+      table.insert(vertices, {p10[1], 0, p10[2], "top"})
+
+      table.insert(vertices, {p10[1], 0, p10[2], "top"})
+      table.insert(vertices, {p01[1], 0, p01[2], "top"})
+      table.insert(vertices, {p11[1], 0, p11[2], "top"})
+    end
   end
-  for i = -half, half - step + 0.001, step do
-    add_walls(i, -half, i + step, -half, "edge_z_min")
-    add_walls(i, half, i + step, half, "edge_z_min")
-    add_walls(-half, i, -half, i + step, "edge_x_min")
-    add_walls(half, i, half, i + step, "edge_x_min")
+  local function add_quad(p1, p2, label)
+    table.insert(vertices, {p1[1], 0, p1[2], label})
+    table.insert(vertices, {p1[1], 0, p1[2], "bottom"})
+    table.insert(vertices, {p2[1], 0, p2[2], label})
+
+    table.insert(vertices, {p1[1], 0, p1[2], "bottom"})
+    table.insert(vertices, {p2[1], 0, p2[2], "bottom"})
+    table.insert(vertices, {p2[1], 0, p2[2], label})
   end
-  for z = -half, half - step + 0.001, step do
-    for x = -half, half - step + 0.001, step do
-      table.insert(vertices, {x, 0, z, "bottom"})
-      table.insert(vertices, {x, 0, z + step, "bottom"})
-      table.insert(vertices, {x + step, 0, z, "bottom"})
-      table.insert(vertices, {x, 0, z + step, "bottom"})
-      table.insert(vertices, {x + step, 0, z + step, "bottom"})
-      table.insert(vertices, {x + step, 0, z, "bottom"})
+  for x = 1, subdivisions - 1 do
+    add_quad(pts[1][x], pts[1][x + 1], "edge_z_min")
+    add_quad(pts[subdivisions][x + 1], pts[subdivisions][x], "edge_z_max")
+  end
+  for z = 1, subdivisions - 1 do
+    add_quad(pts[1][z], pts[1][z + 1], "edge_z_min")
+    add_quad(pts[subdivisions][z + 1], pts[subdivisions][z], "edge_z_max")
+  end
+  for z = 1, subdivisions - 1 do
+    for x = 1, subdivisions - 1 do
+      local p00 = pts[z][x]; local p10 = pts[z][x + 1]
+      local p01 = pts[z + 1][x]; local p11 = pts[z + 1][x + 1]
+
+      table.insert(vertices, {p00[1], 0, p00[2], "bottom"})
+      table.insert(vertices, {p10[1], 0, p10[2], "bottom"})
+      table.insert(vertices, {p01[1], 0, p01[2], "bottom"})
+
+      table.insert(vertices, {p10[1], 0, p10[2], "bottom"})
+      table.insert(vertices, {p11[1], 0, p11[2], "bottom"})
+      table.insert(vertices, {p01[1], 0, p01[2], "bottom"})
     end
   end
   return vertices
@@ -41,16 +76,19 @@ end
 
 local function generate_water_vertices(size, subdivisions)
   local vertices = {}
-  local w_step = size / (subdivisions - 1)
-  local half = size / 2
-  for z = -half, half - w_step + 0.001, w_step do
-    for x = -half, half - w_step + 0.001, w_step do
-      table.insert(vertices, {x, 0, z})
-      table.insert(vertices, {x, 0, z + w_step})
-      table.insert(vertices, {x + w_step, 0, z})
-      table.insert(vertices, {x, 0, z + w_step})
-      table.insert(vertices, {x + w_step, 0, z + w_step})
-      table.insert(vertices, {x + w_step, 0, z})
+  local pts = create_jittered_grid(size, subdivisions)
+  for z = 1, subdivisions - 1 do
+    for x = 1, subdivisions - 1 do
+      local p00 = pts[z][x]; local p10 = pts[z][x + 1]
+      local p01 = pts[z + 1][x]; local p11 = pts[z + 1][x + 1]
+
+      table.insert(vertices, {p00[1], 0, p00[2]})
+      table.insert(vertices, {p01[1], 0, p01[2]})
+      table.insert(vertices, {p10[1], 0, p10[2]})
+
+      table.insert(vertices, {p10[1], 0, p10[2]})
+      table.insert(vertices, {p01[1], 0, p01[2]})
+      table.insert(vertices, {p11[1], 0, p11[2]})
     end
   end
   return vertices
@@ -66,7 +104,13 @@ local function raw_terrain_fn(x, z)
   local seabed_depth = -8.0
   local falloff_start = 0.55
   local dist = math.max(math.abs(x) / half, math.abs(z) / half)
-  local raw_y = 5 * (lovr.math.noise(x * 0.05, z * 0.05) - 0.5)
+
+  local elevation =
+    1.00 * lovr.math.noise(x * 0.03, z * 0.03) +
+    0.50 * lovr.math.noise(x * 0.10, z * 0.10) +
+    0.25 * lovr.math.noise(x * 0.25, z * 0.25)
+
+  local raw_y = (elevation - 0.75) * 16.0
 
   if dist > falloff_start then
     local t = math.min(1.0, math.max(0.0, (dist - falloff_start) / (1.0 - falloff_start)))
@@ -77,7 +121,9 @@ local function raw_terrain_fn(x, z)
 end
 
 local function raw_water_height(x, z, time)
-  return math.sin(x * 0.5 + time) * 0.3 + math.cos(z * 0.4 + time * 0.8) * 0.3
+  return math.sin(x * 0.5 + time) +
+         math.cos(z * 0.4 + time * 0.8) * 0.4 +
+         math.sin((x - z) * 1.2 + time * 1.5) * 0.15
 end
 
 local function get_triangle_height(x, z, size, subs, height_fn, time)
@@ -153,7 +199,10 @@ function lovr.load()
     vec4 lovrmain() {
       vec3 pos = VertexPosition.xyz;
       if (is_water > 0.5) {
-        pos.y += sin(pos.x * 0.5 + time) * 0.3 + cos(pos.z * 0.4 + time * 0.8) * 0.3;
+        float wave = sin(pos.x * 0.5 + time) * 0.4;
+        wave += cos(pos.z * 0.4 + time * 0.8) * 0.4;
+        wave += sin((pos.x - pos.z) * 1.2 + time * 1.5) * 0.15;
+        pos.y += wave;
       }
       worldPos = (Transform * vec4(pos, 1.0)).xyz;
       vertColor = VertexColor;
@@ -169,9 +218,9 @@ function lovr.load()
       vec3 dx = dFdx(worldPos);
       vec3 dy = dFdy(worldPos);
       vec3 faceNormal = normalize(cross(dx, dy));
-      vec3 sunDirection = normalize(vec3(0.6, 1.0, 0.4));
+      vec3 sunDirection = normalize(vec3(0.8, 0.5, 0.4));
       float diffuse = max(dot(faceNormal, sunDirection), 0.0);
-      float light = 0.2 + (diffuse * 0.8);
+      float light = 0.15 + (diffuse * 0.85);
       vec4 baseColor = vec4((Color.rgb * vertColor.rgb) * light, Color.a * vertColor.a);
       if (is_water > 0.5) {
         vec3 viewDir = normalize(cameraPos - worldPos);
