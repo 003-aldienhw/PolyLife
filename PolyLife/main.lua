@@ -76,19 +76,16 @@ end
 
 local function generate_water_vertices(size, subdivisions)
   local vertices = {}
-  local pts = create_jittered_grid(size, subdivisions)
-  for z = 1, subdivisions - 1 do
-    for x = 1, subdivisions - 1 do
-      local p00 = pts[z][x]; local p10 = pts[z][x + 1]
-      local p01 = pts[z + 1][x]; local p11 = pts[z + 1][x + 1]
-
-      table.insert(vertices, {p00[1], 0, p00[2]})
-      table.insert(vertices, {p01[1], 0, p01[2]})
-      table.insert(vertices, {p10[1], 0, p10[2]})
-
-      table.insert(vertices, {p10[1], 0, p10[2]})
-      table.insert(vertices, {p01[1], 0, p01[2]})
-      table.insert(vertices, {p11[1], 0, p11[2]})
+  local step = size / (subdivisions - 1)
+  local half = size / 2
+  for z = -half, half - step + 0.001, step do
+    for x = -half, half - step + 0.001, step do
+      table.insert(vertices, {x, 0, z})
+      table.insert(vertices, {x, 0, z + step})
+      table.insert(vertices, {x + step, 0, z})
+      table.insert(vertices, {x, 0, z + step})
+      table.insert(vertices, {x + step, 0, z + step})
+      table.insert(vertices, {x + step, 0, z})
     end
   end
   return vertices
@@ -97,7 +94,7 @@ end
 local world
 local terrain_size = 150
 local water_size = 160
-local grid_subdivision = 40
+local grid_subdivision = 90
 
 local function raw_terrain_fn(x, z)
   local half = terrain_size / 2
@@ -121,7 +118,7 @@ local function raw_terrain_fn(x, z)
 end
 
 local function raw_water_height(x, z, time)
-  return math.sin(x * 0.5 + time) +
+  return math.sin(x * 0.5 + time) * 0.4 +
          math.cos(z * 0.4 + time * 0.8) * 0.4 +
          math.sin((x - z) * 1.2 + time * 1.5) * 0.15
 end
