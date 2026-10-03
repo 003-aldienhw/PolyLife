@@ -12,12 +12,25 @@ local function create_jittered_grid(size, subs)
       local pz = -half + (z - 1) * step
 
       if x > 1 and x < subs and z > 1 and z < subs then
-        local jitter = step * 0.45
+        local jitter = step * 0.3
         px = px + (lovr.math.random() * 2 - 1) * jitter
         pz = pz + (lovr.math.random() * 2 - 1) * jitter
       end
 
       pts[z][x] = {px, pz}
+    end
+  end
+  return pts
+end
+
+local function create_uniform_grid(size, subs)
+  local step = size / (subs - 1)
+  local half = size / 2
+  local pts = {}
+  for z = 1, subs do
+    pts[z] = {}
+    for x = 1, subs do
+      pts[z][x] = {-half + (x - 1) * step, -half + (z - 1) * step}
     end
   end
   return pts
@@ -76,16 +89,20 @@ end
 
 local function generate_water_vertices(size, subdivisions)
   local vertices = {}
-  local step = size / (subdivisions - 1)
-  local half = size / 2
-  for z = -half, half - step + 0.001, step do
-    for x = -half, half - step + 0.001, step do
-      table.insert(vertices, {x, 0, z})
-      table.insert(vertices, {x, 0, z + step})
-      table.insert(vertices, {x + step, 0, z})
-      table.insert(vertices, {x, 0, z + step})
-      table.insert(vertices, {x + step, 0, z + step})
-      table.insert(vertices, {x + step, 0, z})
+  local pts = create_uniform_grid(size, subdivisions)
+  for z = 1, subdivisions - 1 do
+    for x = 1, subdivisions - 1 do
+      local p00 = pts[z][x]
+      local p01 = pts[z+1][x]
+      local p10 = pts[z][x+1]
+      local p11 = pts[z+1][x+1]
+
+      table.insert(vertices, {p00[1], 0, p00[2]})
+      table.insert(vertices, {p01[1], 0, p01[2]})
+      table.insert(vertices, {p10[1], 0, p10[2]})
+      table.insert(vertices, {p10[1], 0, p10[2]})
+      table.insert(vertices, {p01[1], 0, p01[2]})
+      table.insert(vertices, {p11[1], 0, p11[2]})
     end
   end
   return vertices
@@ -103,11 +120,14 @@ local function raw_terrain_fn(x, z)
   local dist = math.max(math.abs(x) / half, math.abs(z) / half)
 
   local elevation =
-    1.00 * lovr.math.noise(x * 0.03, z * 0.03) +
-    0.50 * lovr.math.noise(x * 0.10, z * 0.10) +
-    0.25 * lovr.math.noise(x * 0.25, z * 0.25)
+    1.00 * lovr.math.noise(x * 0.02, z * 0.02) +
+    0.30 * lovr.math.noise(x * 0.08, z * 0.08)
 
-  local raw_y = (elevation - 0.75) * 16.0
+  local raw_y = (elevation - 0.6) * 10.0
+
+  if raw_y > 2.5 then
+    raw_y = 2.5 + (raw_y - 2.5) * 0.4
+  end
 
   if dist > falloff_start then
     local t = math.min(1.0, math.max(0.0, (dist - falloff_start) / (1.0 - falloff_start)))
@@ -143,7 +163,7 @@ local function get_triangle_height(x, z, size, subs, height_fn, time)
   local h10 = height_fn(px1, pz0, time)
   local h01 = height_fn(px0, pz1, time)
   local h11 = height_fn(px1, pz1, time)
-  
+
   if u + v <= 1.0 then
     return h00 + (h10 - h00) * u + (h01 - h00) * v
   else
@@ -162,18 +182,18 @@ local function get_terrain_color(y, tag)
     return 0.25, 0.22, 0.20, 1.0
   end
 
-  if y > 6.0 then
+  if y > 5.0 then
     return 0.85, 0.88, 0.90, 1.0
-  elseif y > 4.0 then
+  elseif y > 3.0 then
     return 0.50, 0.52, 0.55, 1.0
   elseif y > 0.5 then
-    return 0.25, 0.65, 0.30, 1.0
-  elseif y > -0.5 then
-    return 0.80, 0.75, 0.55, 1.0
-  elseif y > -3.0 then
+    return 0.35, 0.70, 0.30, 1.0
+  elseif y > -1.0 then
+    return 0.85, 0.80, 0.55, 1.0
+  elseif y > -4.0 then
     return 0.70, 0.65, 0.45, 1.0
   else
-    return 0.30, 0.45, 0.55, 1.0
+    return 0.25, 0.45, 0.50, 1.0
   end
 end
 
@@ -215,14 +235,24 @@ function lovr.load()
       vec3 dx = dFdx(worldPos);
       vec3 dy = dFdy(worldPos);
       vec3 faceNormal = normalize(cross(dx, dy));
-      vec3 sunDirection = normalize(vec3(0.8, 0.5, 0.4));
-      float diffuse = max(dot(faceNormal, sunDirection), 0.0);
-      float light = 0.15 + (diffuse * 0.85);
-      vec4 baseColor = vec4((Color.rgb * vertColor.rgb) * light, Color.a * vertColor.a);
+      vec3 lightX = mix(vec3(0.18, 0.22, 0.30), vec3(0.35, 0.30, 0.25), faceNormal.x * 0.5 + 0.5);
+      vec3 lightY = mix(vec3(0.12, 0.12, 0.18), vec3(0.45, 0.50, 0.55), faceNormal.y * 0.5 + 0.5);
+      vec3 lightZ = mix(vec3(0.15, 0.20, 0.28), vec3(0.32, 0.35, 0.28), faceNormal.z * 0.5 + 0.5);
+      vec3 sunDir = normalize(vec3(0.8, 0.7, 0.4));
+      float sunDot = dot(faceNormal, sunDir);
+      float sunWrapped = pow(sunDot * 0.5 + 0.5, 2.0);
+      vec3 sunLight = vec3(0.9, 0.85, 0.7) * sunWrapped * 0.5;
+      vec3 totalLight = lightX + lightY + lightZ + sunLight;
+      float sun = max(dot(faceNormal, sunDir), 0.0);
+      vec3 fillDir = normalize(vec3(-0.6, 0.3, -0.5));
+      float fill = max(dot(faceNormal, fillDir), 0.0);
+      float sky = max(faceNormal.y, 0.0);
+      float light = (sun * 0.75) + (fill * 0.25) + (sky * 0.15) + 0.05;
+      vec4 baseColor = vec4((Color.rgb * vertColor.rgb) * totalLight, Color.a * vertColor.a);
       if (is_water > 0.5) {
         vec3 viewDir = normalize(cameraPos - worldPos);
-        vec3 reflectDir = reflect(-sunDirection, faceNormal);
-        float spec = pow(max(dot(viewDir, reflectDir), 0.0), 48.0);
+        vec3 reflectDir = reflect(-sunDir, faceNormal);
+        float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
         baseColor.rgb += vec3(0.7, 0.9, 1.0) * spec * 1.2;
         baseColor.a = 0.85;
       }
