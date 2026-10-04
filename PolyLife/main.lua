@@ -251,9 +251,14 @@ function lovr.load()
       vec4 baseColor = vec4((Color.rgb * vertColor.rgb) * totalLight, Color.a * vertColor.a);
       if (is_water > 0.5) {
         vec3 viewDir = normalize(cameraPos - worldPos);
+        float slope = 1.0 - max(faceNormal.y, 0.0);
+        vec3 deepWater = vec3(0.0, 0.15, 0.4);
+        vec3 waterAlbedo = mix(Color.rgb, deepWater, clamp(slope * 20.0, 0.0, 1.0));
+        float fresnel = pow(1.0 - max(dot(viewDir, faceNormal), 0.0), 3.0);
+        vec3 skyReflection = vec3(0.4, 0.7, 0.95) * fresnel * 1.2;
         vec3 reflectDir = reflect(-sunDir, faceNormal);
-        float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
-        baseColor.rgb += vec3(0.7, 0.9, 1.0) * spec * 1.2;
+        float spec = pow(max(dot(viewDir, reflectDir), 0.0), 48.0);
+        baseColor.rgb = (waterAlbedo * totalLight) + skyReflection + vec3(0.7, 0.9, 1.0) * spec * 1.5;
         baseColor.a = 0.85;
       }
       if (fogDensity > 0.0) {
