@@ -138,9 +138,9 @@ local function raw_terrain_fn(x, z)
 end
 
 local function raw_water_height(x, z, time)
-  return math.sin(x * 0.5 + time) * 0.4 +
-         math.cos(z * 0.4 + time * 0.8) * 0.4 +
-         math.sin((x - z) * 1.2 + time * 1.5) * 0.15
+  return math.sin(x * 0.4 + time * 1.2) * 0.5 +
+         math.cos(z * 0.5 + time * 0.9) * 0.4 +
+         math.sin((x * 0.8 - z * 0.8) + time * 1.8) * 0.25
 end
 
 local function get_triangle_height(x, z, size, subs, height_fn, time)
@@ -235,39 +235,45 @@ function lovr.load()
       vec3 dx = dFdx(worldPos);
       vec3 dy = dFdy(worldPos);
       vec3 faceNormal = normalize(cross(dx, dy));
-      vec3 lightX = mix(vec3(0.18, 0.22, 0.30), vec3(0.35, 0.30, 0.25), faceNormal.x * 0.5 + 0.5);
-      vec3 lightY = mix(vec3(0.12, 0.12, 0.18), vec3(0.45, 0.50, 0.55), faceNormal.y * 0.5 + 0.5);
-      vec3 lightZ = mix(vec3(0.15, 0.20, 0.28), vec3(0.32, 0.35, 0.28), faceNormal.z * 0.5 + 0.5);
-      vec3 sunDir = normalize(vec3(0.8, 0.7, 0.4));
-      float sunDot = dot(faceNormal, sunDir);
-      float sunWrapped = pow(sunDot * 0.5 + 0.5, 2.0);
-      vec3 sunLight = vec3(0.9, 0.85, 0.7) * sunWrapped * 0.5;
-      vec3 totalLight = lightX + lightY + lightZ + sunLight;
-      float sun = max(dot(faceNormal, sunDir), 0.0);
-      vec3 fillDir = normalize(vec3(-0.6, 0.3, -0.5));
-      float fill = max(dot(faceNormal, fillDir), 0.0);
-      float sky = max(faceNormal.y, 0.0);
-      float light = (sun * 0.75) + (fill * 0.25) + (sky * 0.15) + 0.05;
-      vec4 baseColor = vec4((Color.rgb * vertColor.rgb) * totalLight, Color.a * vertColor.a);
-      if (is_water > 0.5) {
-        vec3 viewDir = normalize(cameraPos - worldPos);
-        float slope = 1.0 - max(faceNormal.y, 0.0);
-        vec3 deepWater = vec3(0.0, 0.15, 0.4);
-        vec3 waterAlbedo = mix(Color.rgb, deepWater, clamp(slope * 20.0, 0.0, 1.0));
-        float fresnel = pow(1.0 - max(dot(viewDir, faceNormal), 0.0), 3.0);
-        vec3 skyReflection = vec3(0.4, 0.7, 0.95) * fresnel * 1.2;
-        vec3 reflectDir = reflect(-sunDir, faceNormal);
-        float spec = pow(max(dot(viewDir, reflectDir), 0.0), 48.0);
-        baseColor.rgb = (waterAlbedo * totalLight) + skyReflection + vec3(0.7, 0.9, 1.0) * spec * 1.5;
-        baseColor.a = 0.85;
+      if (is_water < 0.5) {
+        vec3 lightX = mix(vec3(0.18, 0.22, 0.30), vec3(0.35, 0.30, 0.25), faceNormal.x * 0.5 + 0.5);
+        vec3 lightY = mix(vec3(0.12, 0.12, 0.18), vec3(0.45, 0.50, 0.55), faceNormal.y * 0.5 + 0.5);
+        vec3 lightZ = mix(vec3(0.15, 0.20, 0.28), vec3(0.32, 0.35, 0.28), faceNormal.z * 0.5 + 0.5);
+        vec3 sunDir = normalize(vec3(0.8, 0.7, 0.4));
+        float sunDot = dot(faceNormal, sunDir);
+        float sunWrapped = pow(sunDot * 0.5 + 0.5, 2.0);
+        vec3 sunLight = vec3(0.9, 0.85, 0.7) * sunWrapped * 0.5;
+        vec3 totalLight = lightX + lightY + lightZ + sunLight;
+        vec4 baseColor = vec4((Color.rgb * vertColor.rgb) * totalLight, Color.a * vertColor.a);
+        if (fogDensity > 0.0) {
+          float dist = distance(worldPos, cameraPos);
+          float fogAmount = clamp(1.0 - exp(-dist * fogDensity), 0.0, 1.0);
+          vec3 fogColor = vec3(0.02, 0.12, 0.25);
+          return vec4(mix(baseColor.rgb, fogColor, fogAmount), baseColor.a);
+        }
+        return baseColor;
       }
+      vec3 sunDir = normalize(vec3(0.6, 0.7, 0.4));
+      float sunDiff = max(dot(faceNormal, sunDir), 0.0);
+      vec3 fillDir = normalize(vec3(-0.6, -0.5, -0.6));
+      float fillDiff = max(dot(faceNormal, fillDir), 0.0);
+      float skyDiff = max(faceNormal.y, 0.0);
+      float facetLight = (sunDiff * 0.55) + (fillDiff * 0.35) + (skyDiff * 0.25) + 0.15;
+      vec3 waterBase = vec3(0.05, 0.45, 0.65) * facetLight;
+      vec3 viewDir = normalize(cameraPos - worldPos);
+      vec3 reflectDir = reflect(-sunDir, faceNormal);
+      float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
+      vec3 sunSpecular = vec3(0.8, 0.95, 1.0) * spec * 1.0;
+      float fresnel = pow(1.0 - max(dot(viewDir, faceNormal), 0.0), 2.5);
+      vec3 skyReflect = vec3(0.3, 0.6, 0.85) * fresnel * 0.4;
+      vec4 finalWater = vec4(waterBase + sunSpecular + skyReflect, 0.55);
       if (fogDensity > 0.0) {
         float dist = distance(worldPos, cameraPos);
         float fogAmount = clamp(1.0 - exp(-dist * fogDensity), 0.0, 1.0);
         vec3 fogColor = vec3(0.02, 0.12, 0.25);
-        return vec4(mix(baseColor.rgb, fogColor, fogAmount), baseColor.a);
+        return vec4(mix(finalWater.rgb, fogColor, fogAmount), finalWater.a);
       }
-      return baseColor;
+      return finalWater;
     }
   ]])
   local vertex_format = {
@@ -369,9 +375,9 @@ function lovr.draw(pass)
     local x, y, z, angle, ax, ay, az = collider:getPose()
     local mass = collider:getMass()
     if mass < 5.0 then
-      pass:setColor(0.6, 0.4, 0.2)
+      pass:setColor(0.70, 0.45, 0.25)
     else
-      pass:setColor(0.3, 0.3, 0.3)
+      pass:setColor(0.35, 0.35, 0.35)
     end
     pass:cube(x, y, z, 1, angle, ax, ay, az)
   end
@@ -380,7 +386,7 @@ function lovr.draw(pass)
   pass:draw(ground_mesh)
 
   pass:send('is_water', 1.0)
-  pass:setColor(0.06, 0.25, 0.8, 0.8)
+  pass:setColor(1, 1, 1, 0.55)
   pass:draw(water_mesh)
 
   pass:setShader()
