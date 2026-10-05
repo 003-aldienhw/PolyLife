@@ -138,9 +138,9 @@ local function raw_terrain_fn(x, z)
 end
 
 local function raw_water_height(x, z, time)
-  return math.sin(x * 0.4 + time * 1.2) * 0.5 +
-         math.cos(z * 0.5 + time * 0.9) * 0.4 +
-         math.sin((x * 0.8 - z * 0.8) + time * 1.8) * 0.25
+  return math.sin(x * 0.5 + time) * 0.4 +
+         math.cos(z * 0.4 + time * 0.8) * 0.4 +
+         math.sin((x - z) * 1.2 + time * 1.5) * 0.15
 end
 
 local function get_triangle_height(x, z, size, subs, height_fn, time)
