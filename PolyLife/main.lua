@@ -1,26 +1,29 @@
-local function create_jittered_grid(size, subs)
-  local step = size / (subs - 1)
-  local half = size / 2
-  local pts = {}
+local MC = require "marching_tables"
 
-  lovr.math.setRandomSeed(1337)
+local chunk_size = 32
+local chunk_height = 32
+local voxel_data = {}
 
-  for z = 1, subs do
-    pts[z] = {}
-    for x = 1, subs do
-      local px = -half + (x - 1) * step
-      local pz = -half + (z - 1) * step
+local function get_voxel_index(x, y, z)
+  if x < 1 or x > chunk_size or y < 1 or y > chunk_height or z < 1 or z > chunk_size then
+    return nil
+  end
+  return x * (y * chunk_size) + (z * chunk_size * chunk_height)
+end
 
-      if x > 1 and x < subs and z > 1 and z < subs then
-        local jitter = step * 0.3
-        px = px + (lovr.math.random() * 2 - 1) * jitter
-        pz = pz + (lovr.math.random() * 2 - 1) * jitter
+local function generate_chunk_data()
+  for z = 1, chunk_size do
+    for y = 1, chunk_height do
+      for x = 1, chunk_size do
+        local wx, wy, wz = x * 0.5, y * 0.5, z * 0.5
+        local noise_val = lovr.math.noise(wx * 0.1, wy * 0.15, wz * 0.1) * 8.0
+        local surface_level = 16.0
+        local density = (surface_level - y) + noise_val
+        local idx = get_voxel_index(x, y, z)
+        voxel_data[idx] = density
       end
-
-      pts[z][x] = {px, pz}
     end
   end
-  return pts
 end
 
 local function create_uniform_grid(size, subs)
@@ -34,57 +37,6 @@ local function create_uniform_grid(size, subs)
     end
   end
   return pts
-end
-
-local function generate_terrain_vertices(size, subdivisions)
-  local vertices = {}
-  local pts = create_jittered_grid(size, subdivisions)
-  for z = 1, subdivisions - 1 do
-    for x = 1, subdivisions - 1 do
-      local p00 = pts[z][x]; local p10 = pts[z][x + 1]
-      local p01 = pts[z + 1][x]; local p11 = pts[z + 1][x + 1]
-
-      table.insert(vertices, {p00[1], 0, p00[2], "top"})
-      table.insert(vertices, {p01[1], 0, p01[2], "top"})
-      table.insert(vertices, {p10[1], 0, p10[2], "top"})
-
-      table.insert(vertices, {p10[1], 0, p10[2], "top"})
-      table.insert(vertices, {p01[1], 0, p01[2], "top"})
-      table.insert(vertices, {p11[1], 0, p11[2], "top"})
-    end
-  end
-  local function add_quad(p1, p2, label)
-    table.insert(vertices, {p1[1], 0, p1[2], label})
-    table.insert(vertices, {p1[1], 0, p1[2], "bottom"})
-    table.insert(vertices, {p2[1], 0, p2[2], label})
-
-    table.insert(vertices, {p1[1], 0, p1[2], "bottom"})
-    table.insert(vertices, {p2[1], 0, p2[2], "bottom"})
-    table.insert(vertices, {p2[1], 0, p2[2], label})
-  end
-  for x = 1, subdivisions - 1 do
-    add_quad(pts[1][x], pts[1][x + 1], "edge_z_min")
-    add_quad(pts[subdivisions][x + 1], pts[subdivisions][x], "edge_z_max")
-  end
-  for z = 1, subdivisions - 1 do
-    add_quad(pts[1][z], pts[1][z + 1], "edge_z_min")
-    add_quad(pts[subdivisions][z + 1], pts[subdivisions][z], "edge_z_max")
-  end
-  for z = 1, subdivisions - 1 do
-    for x = 1, subdivisions - 1 do
-      local p00 = pts[z][x]; local p10 = pts[z][x + 1]
-      local p01 = pts[z + 1][x]; local p11 = pts[z + 1][x + 1]
-
-      table.insert(vertices, {p00[1], 0, p00[2], "bottom"})
-      table.insert(vertices, {p10[1], 0, p10[2], "bottom"})
-      table.insert(vertices, {p01[1], 0, p01[2], "bottom"})
-
-      table.insert(vertices, {p10[1], 0, p10[2], "bottom"})
-      table.insert(vertices, {p11[1], 0, p11[2], "bottom"})
-      table.insert(vertices, {p01[1], 0, p01[2], "bottom"})
-    end
-  end
-  return vertices
 end
 
 local function generate_water_vertices(size, subdivisions)
@@ -112,30 +64,6 @@ local world
 local terrain_size = 150
 local water_size = 160
 local grid_subdivision = 90
-
-local function raw_terrain_fn(x, z)
-  local half = terrain_size / 2
-  local seabed_depth = -8.0
-  local falloff_start = 0.55
-  local dist = math.max(math.abs(x) / half, math.abs(z) / half)
-
-  local elevation =
-    1.00 * lovr.math.noise(x * 0.02, z * 0.02) +
-    0.30 * lovr.math.noise(x * 0.08, z * 0.08)
-
-  local raw_y = (elevation - 0.6) * 10.0
-
-  if raw_y > 2.5 then
-    raw_y = 2.5 + (raw_y - 2.5) * 0.4
-  end
-
-  if dist > falloff_start then
-    local t = math.min(1.0, math.max(0.0, (dist - falloff_start) / (1.0 - falloff_start)))
-    local smooth_t = t * t * (3 - 2 * t)
-    return raw_y * (1 - smooth_t) + seabed_depth * smooth_t
-  end
-  return raw_y
-end
 
 local function raw_water_height(x, z, time)
   return math.sin(x * 0.5 + time) * 0.4 +
@@ -198,7 +126,6 @@ local function get_terrain_color(y, tag)
 end
 
 local master_shader
-local ground_mesh
 local water_mesh
 local box_colliders
 
@@ -208,6 +135,7 @@ function lovr.load()
     allowSleep = false
   })
   world:setGravity(0, -9.81, 0)
+  generate_chunk_data()
   master_shader = lovr.graphics.newShader([[
     out vec3 worldPos;
     out vec4 vertColor;
@@ -280,39 +208,13 @@ function lovr.load()
     { 'VertexPosition', 'vec3' },
     { 'VertexColor', 'vec4' }
   }
-  local raw_ground_vertices = generate_terrain_vertices(terrain_size, grid_subdivision)
   local raw_water_vertices = generate_water_vertices(water_size, grid_subdivision)
-  local ground_vertices = {}
-  for i = 1, #raw_ground_vertices, 3 do
-    local v1 = raw_ground_vertices[i]
-    local v2 = raw_ground_vertices[i + 1]
-    local v3 = raw_ground_vertices[i + 2]
-
-    local function get_y(v)
-      if v[4] == "top" or (v[4] and v[4]:sub(1,5) == "edge_") then
-        return raw_terrain_fn(v[1], v[3])
-      elseif v[4] == "bottom" then
-        return world_bottom
-      end
-      return 0
-    end
-
-    local y1, y2, y3 = get_y(v1), get_y(v2), get_y(v3)
-    local avg_y = (y1+ y2 + y3) / 3.0
-    local r, g, b, a = get_terrain_color(avg_y, v1[4])
-
-    table.insert(ground_vertices, {v1[1], y1, v1[3], r, g, b, a})
-    table.insert(ground_vertices, {v2[1], y2, v2[3], r, g, b, a})
-    table.insert(ground_vertices, {v3[1], y3, v3[3], r, g, b, a})
-  end
   local formatted_water_vertices = {}
   for i = 1, #raw_water_vertices do
     local v = raw_water_vertices[i]
     table.insert(formatted_water_vertices, {v[1], v[2], v[3], 1.0, 1.0, 1.0, 1.0})
   end
-  ground_mesh = lovr.graphics.newMesh(vertex_format, ground_vertices)
   water_mesh = lovr.graphics.newMesh(vertex_format, formatted_water_vertices)
-  world:newMeshCollider(ground_mesh)
   box_colliders = {}
 end
 
@@ -383,7 +285,6 @@ function lovr.draw(pass)
   end
 
   pass:setColor(1, 1, 1)
-  pass:draw(ground_mesh)
 
   pass:send('is_water', 1.0)
   pass:setColor(1, 1, 1, 0.55)
