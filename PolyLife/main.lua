@@ -8,7 +8,7 @@ local function get_voxel_index(x, y, z)
   if x < 1 or x > chunk_size or y < 1 or y > chunk_height or z < 1 or z > chunk_size then
     return nil
   end
-  return x * (y * chunk_size) + (z * chunk_size * chunk_height)
+  return x + (y - 1) * chunk_size + (z -1) * chunk_size * chunk_height
 end
 
 local function generate_chunk_data()
@@ -24,6 +24,20 @@ local function generate_chunk_data()
       end
     end
   end
+end
+
+local function vertex_interp(p1, p2, val1, val2)
+  if math.abs(val1) < 0.00001 then return p1 end
+  if math.abs(val2) < 0.00001 then return p2 end
+  if math.abs(val1 - val2) < 0.00001 then return p1 end
+
+  local mu = (0.0 - val1) / (val2 - val1)
+  mu = math.max(0.0, math.min(1.0, mu))
+  return {
+    p1[1] + mu * (p2[1] - p1[1]),
+    p1[2] + mu * (p2[2] - p1[2]),
+    p1[3] + mu * (p2[3] - p1[3]),
+  }
 end
 
 local function create_uniform_grid(size, subs)
@@ -103,25 +117,79 @@ local function physical_water_height(x, z, time)
   return get_triangle_height(x, z, water_size, grid_subdivision, raw_water_height, time)
 end
 
-local function get_terrain_color(y, tag)
-  if tag == "bottom" then
-    return 0.12, 0.12, 0.15, 1.0
-  elseif tag and tag:sub(1,5) == "edge_" then
-    return 0.25, 0.22, 0.20, 1.0
-  end
+local ground_mesh = nil
+local ground_collider = nil
 
-  if y > 5.0 then
-    return 0.85, 0.88, 0.90, 1.0
-  elseif y > 3.0 then
-    return 0.50, 0.52, 0.55, 1.0
-  elseif y > 0.5 then
-    return 0.35, 0.70, 0.30, 1.0
-  elseif y > -1.0 then
-    return 0.85, 0.80, 0.55, 1.0
-  elseif y > -4.0 then
-    return 0.70, 0.65, 0.45, 1.0
-  else
-    return 0.25, 0.45, 0.50, 1.0
+local function generate_terrain_mesh()
+  local vertices = {}
+
+  local corner_offsets = {
+    {0, 0, 0}, {1, 0, 0}, {1, 0, 1}, {0, 0, 1},
+    {0, 1, 0}, {1, 1, 0}, {1, 1, 1}, {0, 1, 1}
+  }
+
+  local half_x = chunk_size / 2
+  local half_z = chunk_size / 2
+
+  for z = 1, chunk_size - 1 do
+    for y = 1, chunk_height - 1 do
+      for x = 1, chunk_size - 1 do
+        local densities = {}
+        local positions = {}
+        for i = 1, 8 do
+          local cx = x + corner_offsets[i][1]
+          local cy = y + corner_offsets[i][2]
+          local cz = z + corner_offsets[i][3]
+          local idx = get_voxel_index(cx, cy, cz)
+          densities[i] = voxel_data[idx] or -1
+          positions[i] = {cx - half_x, cy, cz - half_z}
+        end
+        local cube_index = 0
+        if densities[1] > 0 then cube_index = cube_index + 1 end
+        if densities[2] > 0 then cube_index = cube_index + 2 end
+        if densities[3] > 0 then cube_index = cube_index + 4 end
+        if densities[4] > 0 then cube_index = cube_index + 8 end
+        if densities[5] > 0 then cube_index = cube_index + 16 end
+        if densities[6] > 0 then cube_index = cube_index + 32 end
+        if densities[7] > 0 then cube_index = cube_index + 64 end
+        if densities[8] > 0 then cube_index = cube_index + 128 end
+        if cube_index ~= 0 and cube_index ~= 255 then
+          local tris = MC.tri_table[cube_index + 1]
+          if tris then
+            local edge_vertices = {}
+            for e = 0, 11 do
+              local c1 = MC.edge_to_vertices[e][1] + 1
+              local c2 = MC.edge_to_vertices[e][2] + 1
+              edge_vertices[e] = vertex_interp(positions[c1], positions[c2], densities[c1], densities[c2])
+            end
+            for i = 1, #tris do
+              local edge_idx = tris [i]
+              if edge_idx == -1 then break end
+              local pt = edge_vertices[edge_idx]
+              table.insert(vertices, {pt[1], pt[2], pt[3], 1.0, 1.0, 1.0, 1.0})
+            end
+          end
+        end
+      end
+    end
+  end
+  if #vertices == 0 then return nil end
+  local vertex_format = {
+    { 'VertexPosition', 'vec3' },
+    { 'VertexColor', 'vec4' }
+  }
+  return lovr.graphics.newMesh(vertex_format, vertices)
+end
+
+local function update_terrain_and_physics()
+  if ground_collider then
+    ground_collider:destroy()
+    ground_collider = nil
+  end
+  ground_mesh = generate_terrain_mesh()
+  if ground_mesh then
+    ground_collider = world:newMeshCollider(ground_mesh)
+    ground_collider:setKinematic(true)
   end
 end
 
@@ -130,12 +198,12 @@ local water_mesh
 local box_colliders
 
 function lovr.load()
-  local world_bottom = -9
   world = lovr.physics.newWorld({
     allowSleep = false
   })
   world:setGravity(0, -9.81, 0)
   generate_chunk_data()
+  update_terrain_and_physics()
   master_shader = lovr.graphics.newShader([[
     out vec3 worldPos;
     out vec4 vertColor;
@@ -284,7 +352,10 @@ function lovr.draw(pass)
     pass:cube(x, y, z, 1, angle, ax, ay, az)
   end
 
-  pass:setColor(1, 1, 1)
+  if ground_mesh then
+    pass:setColor(0.15, 0.45, 0.2)
+    pass:draw(ground_mesh)
+  end
 
   pass:send('is_water', 1.0)
   pass:setColor(1, 1, 1, 0.55)
