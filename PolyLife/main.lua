@@ -20,6 +20,7 @@ local function generate_chunk_data()
         local surface_level = 16.0
         local density = (surface_level - y) + noise_val
         local idx = get_voxel_index(x, y, z)
+        if not idx then return end
         voxel_data[idx] = density
       end
     end
