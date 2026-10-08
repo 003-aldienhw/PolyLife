@@ -8,7 +8,7 @@ local function get_voxel_index(x, y, z)
   if x < 1 or x > chunk_size or y < 1 or y > chunk_height or z < 1 or z > chunk_size then
     return nil
   end
-  return x + (y - 1) * chunk_size + (z -1) * chunk_size * chunk_height
+  return x + (y - 1) * chunk_size + (z - 1) * chunk_size * chunk_height
 end
 
 local function generate_chunk_data()
@@ -20,8 +20,9 @@ local function generate_chunk_data()
         local surface_level = 16.0
         local density = (surface_level - y) + noise_val
         local idx = get_voxel_index(x, y, z)
-        if not idx then return end
-        voxel_data[idx] = density
+        if idx then
+          voxel_data[idx] = density
+        end
       end
     end
   end
@@ -120,17 +121,25 @@ end
 
 local ground_mesh = nil
 local ground_collider = nil
+local voxel_scale = 4.0
 
 local function generate_terrain_mesh()
   local vertices = {}
 
   local corner_offsets = {
-    {0, 0, 0}, {1, 0, 0}, {1, 0, 1}, {0, 0, 1},
-    {0, 1, 0}, {1, 1, 0}, {1, 1, 1}, {0, 1, 1}
+    {0, 0, 0},
+    {1, 0, 0},
+    {1, 0, 1},
+    {0, 0, 1},
+    {0, 1, 0},
+    {1, 1, 0},
+    {1, 1, 1},
+    {0, 1, 1}
   }
 
   local half_x = chunk_size / 2
   local half_z = chunk_size / 2
+  local surface_level = 20.0
 
   for z = 1, chunk_size - 1 do
     for y = 1, chunk_height - 1 do
@@ -143,7 +152,11 @@ local function generate_terrain_mesh()
           local cz = z + corner_offsets[i][3]
           local idx = get_voxel_index(cx, cy, cz)
           densities[i] = voxel_data[idx] or -1
-          positions[i] = {cx - half_x, cy, cz - half_z}
+          positions[i] = {
+            (cx - half_x) * voxel_scale,
+            (cy - surface_level) * voxel_scale,
+            (cz - half_z) * voxel_scale
+          }
         end
         local cube_index = 0
         if densities[1] > 0 then cube_index = cube_index + 1 end
@@ -167,7 +180,9 @@ local function generate_terrain_mesh()
               local edge_idx = tris [i]
               if edge_idx == -1 then break end
               local pt = edge_vertices[edge_idx]
-              table.insert(vertices, {pt[1], pt[2], pt[3], 1.0, 1.0, 1.0, 1.0})
+              if pt then
+                table.insert(vertices, {pt[1], pt[2], pt[3], 1.0, 1.0, 1.0, 1.0})
+              end
             end
           end
         end
