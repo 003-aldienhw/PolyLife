@@ -11,18 +11,25 @@ local function get_voxel_index(x, y, z)
   return x + (y - 1) * chunk_size + (z - 1) * chunk_size * chunk_height
 end
 
+local voxel_scale = 4.0
+
 local function generate_chunk_data()
+  local half_c = chunk_size / 2
+  local world_radius = (chunk_size * voxel_scale) * 0.45
   for z = 1, chunk_size do
     for y = 1, chunk_height do
       for x = 1, chunk_size do
-        local wx, wy, wz = x * 0.5, y * 0.5, z * 0.5
-        local noise_val = lovr.math.noise(wx * 0.1, wy * 0.15, wz * 0.1) * 8.0
-        local surface_level = 16.0
-        local density = (surface_level - y) + noise_val
+        local wx = (x - half_c) * voxel_scale
+        local wz = (z - half_c) * voxel_scale
+        local wy = (y - 16.0) * voxel_scale
+        local dist = math.sqrt(wx * wx + wz * wz)
+        local falloff = math.max(-0.6, 1.0 - (dist / world_radius))
+        local noise_val = (lovr.math.noise(wx * 0.015, wz * 0.015) * 16.0) + (lovr.math.noise(wx * 0.06, wz * 0.06) * 4.0)
+        local terrain_height = 3.0 + (noise_val * math.max(0.0, falloff)) - ((1.0 - falloff) * 18.0)
+        local density = terrain_height - wy
+        if y == 1 then density = 50.0 end
         local idx = get_voxel_index(x, y, z)
-        if idx then
-          voxel_data[idx] = density
-        end
+        if idx then voxel_data[idx] = density end
       end
     end
   end
@@ -35,18 +42,11 @@ local function vertex_interp(p1, p2, val1, val2)
 
   local mu = (0.0 - val1) / (val2 - val1)
   mu = math.max(0.0, math.min(1.0, mu))
-  local pt = {
+  return {
     p1[1] + mu * (p2[1] - p1[1]),
     p1[2] + mu * (p2[2] - p1[2]),
     p1[3] + mu * (p2[3] - p1[3]),
   }
-
-  local snap = 1.0
-  pt[1] = math.floor(pt[1] / snap + 0.5) * snap
-  pt[2] = math.floor(pt[2] / snap + 0.5) * snap
-  pt[3] = math.floor(pt[3] / snap + 0.5) * snap
-
-  return pt
 end
 
 local function create_uniform_grid(size, subs)
@@ -128,10 +128,10 @@ end
 
 local ground_mesh = nil
 local ground_collider = nil
-local voxel_scale = 4.0
 
 local function generate_terrain_mesh()
-  local vertices = {}
+  local render_vertices = {}
+  local physics_vertices = {}
 
   local corner_offsets = {
     {0, 0, 0},
@@ -146,7 +146,7 @@ local function generate_terrain_mesh()
 
   local half_x = chunk_size / 2
   local half_z = chunk_size / 2
-  local surface_level = 20.0
+  local surface_level = 16.0
 
   for z = 1, chunk_size - 1 do
     for y = 1, chunk_height - 1 do
@@ -179,16 +179,35 @@ local function generate_terrain_mesh()
           if tris then
             local edge_vertices = {}
             for e = 0, 11 do
-              local c1 = MC.edge_to_vertices[e][1] + 1
-              local c2 = MC.edge_to_vertices[e][2] + 1
-              edge_vertices[e] = vertex_interp(positions[c1], positions[c2], densities[c1], densities[c2])
+              local edge_info = MC.edge_to_vertices[e]
+              if edge_info then
+                local c1 = edge_info[1] + 1
+                local c2 = edge_info[2] + 1
+                edge_vertices[e] = vertex_interp(positions[c1], positions[c2], densities[c1], densities[c2])
+              end
             end
-            for i = 1, #tris do
-              local edge_idx = tris [i]
-              if edge_idx == -1 then break end
-              local pt = edge_vertices[edge_idx]
-              if pt then
-                table.insert(vertices, {pt[1], pt[2], pt[3], 1.0, 1.0, 1.0, 1.0})
+            for i = 1, #tris, 3 do
+              local e1 = tris[i]
+              if e1 == -1 or not e1 then break end
+              local e2 = tris[i + 1]
+              local e3 = tris[i + 2]
+              local pt1 = edge_vertices[e1]
+              local pt2 = edge_vertices[e2]
+              local pt3 = edge_vertices[e3]
+              if pt1 and pt2 and pt3 then
+                table.insert(physics_vertices, pt1)
+                table.insert(physics_vertices, pt2)
+                table.insert(physics_vertices, pt3)
+                for _, pt in ipairs({pt1, pt3, pt2}) do
+                  local wy = pt[2]
+                  local r, g, b = 0.20, 0.55, 0.25
+                  if wy < 1.0 then
+                    r, g, b = 0.88, 0.80, 0.60
+                  elseif wy > 10.0 then
+                    r, g, b = 0.45, 0.45, 0.48
+                  end
+                  table.insert(render_vertices, {pt[1], pt[2], pt[3], r, g, b, 1.0})
+                end
               end
             end
           end
@@ -196,23 +215,31 @@ local function generate_terrain_mesh()
       end
     end
   end
-  if #vertices == 0 then return nil end
-  local vertex_format = {
+  if #render_vertices == 0 then return nil, nil end
+  local color_format = {
     { 'VertexPosition', 'vec3' },
     { 'VertexColor', 'vec4' }
   }
-  return lovr.graphics.newMesh(vertex_format, vertices)
+  local pos_format = {
+    { 'VertexPosition', 'vec3' }
+  }
+  local r_mesh = lovr.graphics.newMesh(color_format, render_vertices)
+  local p_mesh = lovr.graphics.newMesh(pos_format, physics_vertices)
+  return r_mesh, p_mesh
 end
+
+local physics_mesh = nil
 
 local function update_terrain_and_physics()
   if ground_collider then
     ground_collider:destroy()
     ground_collider = nil
   end
-  ground_mesh = generate_terrain_mesh()
-  if ground_mesh then
-    ground_collider = world:newMeshCollider(ground_mesh)
-    ground_collider:setKinematic(true)
+  local r_mesh, p_mesh = generate_terrain_mesh()
+  ground_mesh = r_mesh
+  physics_mesh = p_mesh
+  if physics_mesh then
+    ground_collider = world:newMeshCollider(physics_mesh)
   end
 end
 
@@ -376,7 +403,7 @@ function lovr.draw(pass)
   end
 
   if ground_mesh then
-    pass:setColor(0.15, 0.45, 0.2)
+    pass:setColor(1, 1, 1, 1)
     pass:draw(ground_mesh)
   end
 
