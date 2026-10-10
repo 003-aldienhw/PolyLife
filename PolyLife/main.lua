@@ -35,11 +35,18 @@ local function vertex_interp(p1, p2, val1, val2)
 
   local mu = (0.0 - val1) / (val2 - val1)
   mu = math.max(0.0, math.min(1.0, mu))
-  return {
+  local pt = {
     p1[1] + mu * (p2[1] - p1[1]),
     p1[2] + mu * (p2[2] - p1[2]),
     p1[3] + mu * (p2[3] - p1[3]),
   }
+
+  local snap = 1.0
+  pt[1] = math.floor(pt[1] / snap + 0.5) * snap
+  pt[2] = math.floor(pt[2] / snap + 0.5) * snap
+  pt[3] = math.floor(pt[3] / snap + 0.5) * snap
+
+  return pt
 end
 
 local function create_uniform_grid(size, subs)
