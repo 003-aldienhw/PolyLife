@@ -199,11 +199,11 @@ local function generate_terrain_mesh()
                 table.insert(physics_vertices, pt2)
                 table.insert(physics_vertices, pt3)
                 for _, pt in ipairs({pt1, pt3, pt2}) do
-                  local wy = pt[2]
+                  local avg_y = (pt1[2] + pt2[2] + pt3[2]) / 3.0
                   local r, g, b = 0.20, 0.55, 0.25
-                  if wy < 1.0 then
+                  if avg_y < 1.0 then
                     r, g, b = 0.88, 0.80, 0.60
-                  elseif wy > 10.0 then
+                  elseif avg_y > 10.0 then
                     r, g, b = 0.45, 0.45, 0.48
                   end
                   table.insert(render_vertices, {pt[1], pt[2], pt[3], r, g, b, 1.0})
