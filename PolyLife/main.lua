@@ -1,8 +1,13 @@
 local MC = require "marching_tables"
 
+local world
 local chunk_size = 32
 local chunk_height = 32
+local voxel_scale = 4.0
 local voxel_data = {}
+local terrain_size = 150
+local water_size = 160
+local grid_subdivision = 90
 
 local function get_voxel_index(x, y, z)
   if x < 1 or x > chunk_size or y < 1 or y > chunk_height or z < 1 or z > chunk_size then
@@ -11,7 +16,6 @@ local function get_voxel_index(x, y, z)
   return x + (y - 1) * chunk_size + (z - 1) * chunk_size * chunk_height
 end
 
-local voxel_scale = 4.0
 
 local function generate_chunk_data()
   local half_c = chunk_size / 2
@@ -82,11 +86,6 @@ local function generate_water_vertices(size, subdivisions)
   end
   return vertices
 end
-
-local world
-local terrain_size = 150
-local water_size = 160
-local grid_subdivision = 90
 
 local function raw_water_height(x, z, time)
   return math.sin(x * 0.5 + time) * 0.4 +
