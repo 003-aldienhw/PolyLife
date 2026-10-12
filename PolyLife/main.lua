@@ -1,13 +1,13 @@
 local MC = require "marching_tables"
 
 local world
-local chunk_size = 32
+local chunk_size = 64
 local chunk_height = 32
-local voxel_scale = 4.0
+local voxel_scale = 3.0
 local voxel_data = {}
-local terrain_size = 150
-local water_size = 160
-local grid_subdivision = 90
+local terrain_size = 260
+local water_size = 280
+local grid_subdivision = 120
 
 local function get_voxel_index(x, y, z)
   if x < 1 or x > chunk_size or y < 1 or y > chunk_height or z < 1 or z > chunk_size then
@@ -27,9 +27,24 @@ local function generate_chunk_data()
         local wz = (z - half_c) * voxel_scale
         local wy = (y - 16.0) * voxel_scale
         local dist = math.sqrt(wx * wx + wz * wz)
-        local falloff = math.max(-0.6, 1.0 - (dist / world_radius))
-        local noise_val = (lovr.math.noise(wx * 0.015, wz * 0.015) * 16.0) + (lovr.math.noise(wx * 0.06, wz * 0.06) * 4.0)
-        local terrain_height = 3.0 + (noise_val * math.max(0.0, falloff)) - ((1.0 - falloff) * 18.0)
+        local edge_factor = math.max(0.0, 1.0 - (dist / world_radius))
+        local n1 = lovr.math.noise(wx * 0.006, wz * 0.006)
+        local n2 = lovr.math.noise(wx * 0.02, wz * 0.02)
+        local arch = n1 * 0.7 + n2 * 0.3
+        local island_shape = (arch - 0.48) * 32.0
+        local hills = (lovr.math.noise(wx * 0.04, wz * 0.04) * 4.5) + (lovr.math.noise(wx * 0.15, wz * 0.15) * 1.5)
+        local seabed_roughness = (lovr.math.noise(wx * 0.05, wz * 0.05) * 4.0) + (lovr.math.noise(wx * 0.15, wz * 0.15) * 1.5)
+        local terrain_height = 0.0
+        if island_shape > 0.0 then
+          terrain_height = island_shape + hills
+        else
+          if island_shape > -2.5 then
+            terrain_height = island_shape + (seabed_roughness * 0.25)
+          else
+            terrain_height = -2.5 + (island_shape + 2.5) * 2.2 + seabed_roughness
+          end
+        end
+        terrain_height = terrain_height * edge_factor - ((1.0 - edge_factor) * 15.0)
         local density = terrain_height - wy
         if y == 1 then density = 50.0 end
         local idx = get_voxel_index(x, y, z)
@@ -200,9 +215,11 @@ local function generate_terrain_mesh()
                 for _, pt in ipairs({pt1, pt3, pt2}) do
                   local avg_y = (pt1[2] + pt2[2] + pt3[2]) / 3.0
                   local r, g, b = 0.20, 0.55, 0.25
-                  if avg_y < 1.0 then
+                  if avg_y < -3.0 then
+                    r, g, b = 0.35, 0.35, 0.38
+                  elseif avg_y < 0.8 then
                     r, g, b = 0.88, 0.80, 0.60
-                  elseif avg_y > 10.0 then
+                  elseif avg_y > 12.0 then
                     r, g, b = 0.45, 0.45, 0.48
                   end
                   table.insert(render_vertices, {pt[1], pt[2], pt[3], r, g, b, 1.0})
