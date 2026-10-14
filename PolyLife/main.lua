@@ -28,23 +28,21 @@ local function generate_chunk_data()
         local wy = (y - 16.0) * voxel_scale
         local dist = math.sqrt(wx * wx + wz * wz)
         local edge_factor = math.max(0.0, 1.0 - (dist / world_radius))
-        local n1 = lovr.math.noise(wx * 0.006, wz * 0.006)
-        local n2 = lovr.math.noise(wx * 0.02, wz * 0.02)
-        local arch = n1 * 0.7 + n2 * 0.3
-        local island_shape = (arch - 0.48) * 32.0
-        local hills = (lovr.math.noise(wx * 0.04, wz * 0.04) * 4.5) + (lovr.math.noise(wx * 0.15, wz * 0.15) * 1.5)
-        local seabed_roughness = (lovr.math.noise(wx * 0.05, wz * 0.05) * 4.0) + (lovr.math.noise(wx * 0.15, wz * 0.15) * 1.5)
+        local arch_mask = lovr.math.noise(wx * 0.008, wz * 0.008) * 0.65 + lovr.math.noise(wx * 0.025, wz * 0.025) * 0.35
+        local hills = (lovr.math.noise(wx * 0.03, wz * 0.03) * 7.0) + (lovr.math.noise(wx * 0.09, wz * 0.09) * 2.0)
+        local land_height = (arch_mask * 13.0 + hills) * edge_factor - 3.5
         local terrain_height = 0.0
-        if island_shape > 0.0 then
-          terrain_height = island_shape + hills
+        if land_height > 0.5 then
+          terrain_height = land_height
         else
-          if island_shape > -2.5 then
-            terrain_height = island_shape + (seabed_roughness * 0.25)
+          local seabed_roughness = (lovr.math.noise(wx * 0.04, wz * 0.04) * 4.0) + (lovr.math.noise(wx * 0.12, wz * 0.12) * 1.5)
+          if land_height > -2.0 then
+            terrain_height = land_height + (seabed_roughness * 0.25)
           else
-            terrain_height = -2.5 + (island_shape + 2.5) * 2.2 + seabed_roughness
+            terrain_height = -2.0 + (land_height + 2.0) * 1.8 + seabed_roughness
           end
         end
-        terrain_height = terrain_height * edge_factor - ((1.0 - edge_factor) * 15.0)
+        terrain_height = terrain_height * edge_factor - ((1.0 - edge_factor) * 10.0)
         local density = terrain_height - wy
         if y == 1 then density = 50.0 end
         local idx = get_voxel_index(x, y, z)
