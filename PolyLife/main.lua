@@ -19,30 +19,70 @@ end
 
 local function generate_chunk_data()
   local half_c = chunk_size / 2
-  local world_radius = (chunk_size * voxel_scale) * 0.45
+  local islands = {
+    { x = -48, z = -43, radius = 53, height = 15 },
+    { x = 30, z = -48, radius = 46, height = 13 },
+    { x = -5, z = -12, radius = 57, height = 19 },
+    { x = -53, z = 52, radius = 39, height = 12 },
+    { x = 53, z = 45, radius = 46, height = 16 },
+  }
+  local function clamp01(v)
+    return math.max(0.0, math.min(1.0, v))
+  end
+  local function smooth_step(t)
+    t = clamp01(t)
+    return t * t * (3.0 - 2.0 * t)
+  end
   for z = 1, chunk_size do
     for y = 1, chunk_height do
       for x = 1, chunk_size do
         local wx = (x - half_c) * voxel_scale
         local wz = (z - half_c) * voxel_scale
         local wy = (y - 16.0) * voxel_scale
-        local dist = math.sqrt(wx * wx + wz * wz)
-        local edge_factor = math.max(0.0, 1.0 - (dist / world_radius))
-        local arch_mask = lovr.math.noise(wx * 0.008, wz * 0.008) * 0.65 + lovr.math.noise(wx * 0.025, wz * 0.025) * 0.35
-        local hills = (lovr.math.noise(wx * 0.03, wz * 0.03) * 7.0) + (lovr.math.noise(wx * 0.09, wz * 0.09) * 2.0)
-        local land_height = (arch_mask * 13.0 + hills) * edge_factor - 3.5
-        local terrain_height = 0.0
+        local edge_factor = 0.0
+        local island_height = 12.0
+        for _, island in ipairs(islands) do
+          local dx = wx - island.x
+          local dz = wz - island.z
+          local dist = math.sqrt(dx * dx + dz * dz)
+          local broad_shape = (lovr.math.noise(wx * 0.018, wz * 0.018) - 0.5) * 18.0
+          local medium_shape = (lovr.math.noise(wx * 0.045, wz * 0.045) - 0.5) * 9.0
+          local radius = island.radius + broad_shape + medium_shape
+          local t = 1.0 - dist / radius
+          local influence = smooth_step(t)
+          if influence > edge_factor then
+            edge_factor = influence
+            island_height = island.height
+          end
+        end
+        local broad_hills = (lovr.math.noise(wx * 0.018, wz * 0.018) - 0.5) * 12.0
+        local hills = (lovr.math.noise(wx * 0.045, wz * 0.045) - 0.5) * 9.0
+        local detail = (lovr.math.noise(wx * 0.012, wz * 0.012) - 0.5) * 3.0
+        local boundary_distance = math.min(half_c * voxel_scale - math.abs(wx), half_c * voxel_scale - math.abs(wz))
+        local cliff_width = 18.0
+        local boundary_factor = math.max(0.0, math.min(1.0, boundary_distance / cliff_width))
+        boundary_factor = boundary_factor * boundary_factor
+        local land_height = (island_height + broad_hills + hills + detail) * edge_factor - 3.0
+        local cliff_depth = 35.0
+        local height = land_height - (1.0 - boundary_factor) * cliff_depth
+        local terrain_height
         if land_height > 0.5 then
           terrain_height = land_height
         else
-          local seabed_roughness = (lovr.math.noise(wx * 0.04, wz * 0.04) * 4.0) + (lovr.math.noise(wx * 0.12, wz * 0.12) * 1.5)
+          local seabed = (lovr.math.noise(wx * 0.035, wz * 0.035) - 0.5) * 5.0 + (lovr.math.noise(wx * 0.010, wz * 0.010) - 0.5) * 2.0
           if land_height > -2.0 then
-            terrain_height = land_height + (seabed_roughness * 0.25)
+            terrain_height = land_height + seabed * 0.25
           else
-            terrain_height = -2.0 + (land_height + 2.0) * 1.8 + seabed_roughness
+            terrain_height = -4.0 + (land_height + 2.0) * 1.4 + seabed
           end
         end
-        terrain_height = terrain_height * edge_factor - ((1.0 - edge_factor) * 10.0)
+        local world_edge = (chunk_size / 2 - 1) * voxel_scale
+        local boundary_distance = math.min(wx + world_edge, world_edge - wx, wz + world_edge, world_edge - wz)
+        local transition_width = 55.0
+        local t = math.max(0.0, math.min(1.0, boundary_distance / transition_width))
+        local smooth = t * t * (3.0 - 2.0 * t)
+        local deep_seabed = -20.0
+        terrain_height = deep_seabed * (1.0 - smooth) + terrain_height * smooth
         local density = terrain_height - wy
         if y == 1 then density = 50.0 end
         local idx = get_voxel_index(x, y, z)
