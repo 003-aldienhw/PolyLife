@@ -44,23 +44,22 @@ local function generate_chunk_data()
         local broad_hills = (lovr.math.noise(wx * broad_scale, wz * broad_scale) - 0.5) * 16.0
         local medium_hills = (lovr.math.noise(wx * medium_scale + 12.5, wz * medium_scale - 7.3) - 0.5) * 8.0
         local small_detail = (lovr.math.noise(wx * detail_scale - 21.2, wz * detail_scale + 15.8) - 0.5) * 3.0
-        local land_height = (10.0 + broad_hills + medium_hills + small_detail) * island_mask - 3.0
+        local land_height = 10.0 + broad_hills + medium_hills + small_detail
+        local beach_height = 0.8
         local seabed = -8.0 + (lovr.math.noise(wx * 0.035, wz * 0.035) - 0.5) * 5.0 + (lovr.math.noise(wx * 0.010, wz * 0.010) - 0.5) * 3.0
-        local terrain_height
-        if land_height > 0.5 then
-          terrain_height = land_height
-        else
-          terrain_height = seabed
-        end
+        local underwater_t = smooth_step(clamp01(island_mask / 0.30))
+        local underwater_height = seabed + (beach_height - seabed) * underwater_t
+        local land_t = smooth_step(clamp01((island_mask - 0.10) / 0.90))
+        local inland_height = math.max(land_height, beach_height + 1.0)
+        local sloped_land = beach_height + (inland_height - beach_height) * land_t
+        local terrain_height = underwater_height + (sloped_land - underwater_height) * underwater_t
         local world_edge = (half_c - 1) * voxel_scale
         local boundary_distance = math.min(wx + world_edge, world_edge - wx, wz + world_edge, world_edge - wz)
-        local transition_width = 55.0
+        local transition_width = 45.0
         local edge_t = clamp01(boundary_distance / transition_width)
-        local edge_blend = smooth_step(edge_t)
         local deep_seabed = -20.0
-        terrain_height = deep_seabed * (1.0 - edge_blend) + terrain_height * edge_blend
+        terrain_height = deep_seabed + (terrain_height - deep_seabed) * edge_t
         local density = terrain_height - wy
-        if y == 1 then density = 50.0 end
         local idx = get_voxel_index(x, y, z)
         if idx then voxel_data[idx] = density end
       end
@@ -231,7 +230,7 @@ local function generate_terrain_mesh()
                   local r, g, b = 0.20, 0.55, 0.25
                   if avg_y < -3.0 then
                     r, g, b = 0.35, 0.35, 0.38
-                  elseif avg_y < 0.8 then
+                  elseif avg_y < 2.5 then
                     r, g, b = 0.88, 0.80, 0.60
                   elseif avg_y > 12.0 then
                     r, g, b = 0.45, 0.45, 0.48
