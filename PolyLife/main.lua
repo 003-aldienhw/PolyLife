@@ -33,18 +33,21 @@ local function generate_chunk_data()
   local broad_scale = 0.018
   local medium_scale = 0.045
   local detail_scale = 0.085
+
   for z = 1, chunk_size do
     for y = 1, chunk_height do
       for x = 1, chunk_size do
         local wx = (x - half_c) * voxel_scale
         local wz = (z - half_c) * voxel_scale
         local wy = (y - 16.0) * voxel_scale
+
         local island_noise = lovr.math.noise(wx * island_scale, wz * island_scale) * 0.75 + lovr.math.noise(wx * island_scale * 2.1 + 31.7, wz * island_scale * 2.1 - 18.4) * 0.25
         local island_mask = smooth_step((island_noise - island_threshold) / island_blend)
         local broad_hills = (lovr.math.noise(wx * broad_scale, wz * broad_scale) - 0.5) * 16.0
         local medium_hills = (lovr.math.noise(wx * medium_scale + 12.5, wz * medium_scale - 7.3) - 0.5) * 8.0
         local small_detail = (lovr.math.noise(wx * detail_scale - 21.2, wz * detail_scale + 15.8) - 0.5) * 3.0
         local land_height = 10.0 + broad_hills + medium_hills + small_detail
+
         local beach_height = 0.8
         local seabed = -8.0 + (lovr.math.noise(wx * 0.035, wz * 0.035) - 0.5) * 5.0 + (lovr.math.noise(wx * 0.010, wz * 0.010) - 0.5) * 3.0
         local underwater_t = smooth_step(clamp01(island_mask / 0.30))
@@ -53,14 +56,17 @@ local function generate_chunk_data()
         local inland_height = math.max(land_height, beach_height + 1.0)
         local sloped_land = beach_height + (inland_height - beach_height) * land_t
         local terrain_height = underwater_height + (sloped_land - underwater_height) * underwater_t
+
         local world_edge = (half_c - 1) * voxel_scale
         local boundary_distance = math.min(wx + world_edge, world_edge - wx, wz + world_edge, world_edge - wz)
         local transition_width = 45.0
         local edge_t = clamp01(boundary_distance / transition_width)
         local deep_seabed = -20.0
         terrain_height = deep_seabed + (terrain_height - deep_seabed) * edge_t
+
         local density = terrain_height - wy
         local idx = get_voxel_index(x, y, z)
+
         if idx then voxel_data[idx] = density end
       end
     end
@@ -74,6 +80,7 @@ local function vertex_interp(p1, p2, val1, val2)
 
   local mu = (0.0 - val1) / (val2 - val1)
   mu = math.max(0.0, math.min(1.0, mu))
+
   return {
     p1[1] + mu * (p2[1] - p1[1]),
     p1[2] + mu * (p2[2] - p1[2]),
@@ -85,18 +92,21 @@ local function create_uniform_grid(size, subs)
   local step = size / (subs - 1)
   local half = size / 2
   local pts = {}
+
   for z = 1, subs do
     pts[z] = {}
     for x = 1, subs do
       pts[z][x] = {-half + (x - 1) * step, -half + (z - 1) * step}
     end
   end
+
   return pts
 end
 
 local function generate_water_vertices(size, subdivisions)
   local vertices = {}
   local pts = create_uniform_grid(size, subdivisions)
+
   for z = 1, subdivisions - 1 do
     for x = 1, subdivisions - 1 do
       local p00 = pts[z][x]
@@ -127,6 +137,7 @@ local function get_triangle_height(x, z, size, subs, height_fn, time)
   local lx = math.max(0, math.min((x + half) / step, subs - 1))
   local lz = math.max(0, math.min((z + half) / step, subs - 1))
   local x0, z0 = math.floor(lx), math.floor(lz)
+
   if x0 >= subs - 1 then
     x0 = subs - 2
   end
@@ -180,6 +191,7 @@ local function generate_terrain_mesh()
       for x = 1, chunk_size - 1 do
         local densities = {}
         local positions = {}
+
         for i = 1, 8 do
           local cx = x + corner_offsets[i][1]
           local cy = y + corner_offsets[i][2]
@@ -192,6 +204,7 @@ local function generate_terrain_mesh()
             (cz - half_z) * voxel_scale
           }
         end
+
         local cube_index = 0
         if densities[1] > 0 then cube_index = cube_index + 1 end
         if densities[2] > 0 then cube_index = cube_index + 2 end
@@ -201,33 +214,42 @@ local function generate_terrain_mesh()
         if densities[6] > 0 then cube_index = cube_index + 32 end
         if densities[7] > 0 then cube_index = cube_index + 64 end
         if densities[8] > 0 then cube_index = cube_index + 128 end
+
         if cube_index ~= 0 and cube_index ~= 255 then
           local tris = MC.tri_table[cube_index + 1]
+
           if tris then
             local edge_vertices = {}
+
             for e = 0, 11 do
               local edge_info = MC.edge_to_vertices[e]
+
               if edge_info then
                 local c1 = edge_info[1] + 1
                 local c2 = edge_info[2] + 1
                 edge_vertices[e] = vertex_interp(positions[c1], positions[c2], densities[c1], densities[c2])
               end
             end
+
             for i = 1, #tris, 3 do
               local e1 = tris[i]
+
               if e1 == -1 or not e1 then break end
               local e2 = tris[i + 1]
               local e3 = tris[i + 2]
               local pt1 = edge_vertices[e1]
               local pt2 = edge_vertices[e2]
               local pt3 = edge_vertices[e3]
+
               if pt1 and pt2 and pt3 then
                 table.insert(physics_vertices, pt1)
                 table.insert(physics_vertices, pt2)
                 table.insert(physics_vertices, pt3)
+
                 for _, pt in ipairs({pt1, pt3, pt2}) do
                   local avg_y = (pt1[2] + pt2[2] + pt3[2]) / 3.0
                   local r, g, b = 0.20, 0.55, 0.25
+
                   if avg_y < -3.0 then
                     r, g, b = 0.35, 0.35, 0.38
                   elseif avg_y < 2.5 then
@@ -235,6 +257,7 @@ local function generate_terrain_mesh()
                   elseif avg_y > 12.0 then
                     r, g, b = 0.45, 0.45, 0.48
                   end
+
                   table.insert(render_vertices, {pt[1], pt[2], pt[3], r, g, b, 1.0})
                 end
               end
@@ -244,16 +267,20 @@ local function generate_terrain_mesh()
       end
     end
   end
+
   if #render_vertices == 0 then return nil, nil end
   local color_format = {
     { 'VertexPosition', 'vec3' },
     { 'VertexColor', 'vec4' }
   }
+
   local pos_format = {
     { 'VertexPosition', 'vec3' }
   }
+
   local r_mesh = lovr.graphics.newMesh(color_format, render_vertices)
   local p_mesh = lovr.graphics.newMesh(pos_format, physics_vertices)
+
   return r_mesh, p_mesh
 end
 
@@ -264,9 +291,11 @@ local function update_terrain_and_physics()
     ground_collider:destroy()
     ground_collider = nil
   end
+
   local r_mesh, p_mesh = generate_terrain_mesh()
   ground_mesh = r_mesh
   physics_mesh = p_mesh
+
   if physics_mesh then
     ground_collider = world:newMeshCollider(physics_mesh)
   end
@@ -280,24 +309,30 @@ function lovr.load()
   world = lovr.physics.newWorld({
     allowSleep = false
   })
+  
   world:setGravity(0, -9.81, 0)
   generate_chunk_data()
   update_terrain_and_physics()
+
   master_shader = lovr.graphics.newShader([[
     out vec3 worldPos;
     out vec4 vertColor;
     uniform float time;
     uniform float is_water;
+
     vec4 lovrmain() {
       vec3 pos = VertexPosition.xyz;
+
       if (is_water > 0.5) {
         float wave = sin(pos.x * 0.5 + time) * 0.4;
         wave += cos(pos.z * 0.4 + time * 0.8) * 0.4;
         wave += sin((pos.x - pos.z) * 1.2 + time * 1.5) * 0.15;
         pos.y += wave;
       }
+      
       worldPos = (Transform * vec4(pos, 1.0)).xyz;
       vertColor = VertexColor;
+
       return Projection * View * vec4(worldPos, 1.0);
     }
   ]], [[
@@ -306,48 +341,60 @@ function lovr.load()
     uniform float fogDensity;
     uniform vec3 cameraPos;
     uniform float is_water;
+
     vec4 lovrmain() {
       vec3 dx = dFdx(worldPos);
       vec3 dy = dFdy(worldPos);
       vec3 faceNormal = normalize(cross(dx, dy));
+
       if (is_water < 0.5) {
         vec3 lightX = mix(vec3(0.18, 0.22, 0.30), vec3(0.35, 0.30, 0.25), faceNormal.x * 0.5 + 0.5);
         vec3 lightY = mix(vec3(0.12, 0.12, 0.18), vec3(0.45, 0.50, 0.55), faceNormal.y * 0.5 + 0.5);
         vec3 lightZ = mix(vec3(0.15, 0.20, 0.28), vec3(0.32, 0.35, 0.28), faceNormal.z * 0.5 + 0.5);
+
         vec3 sunDir = normalize(vec3(0.8, 0.7, 0.4));
         float sunDot = dot(faceNormal, sunDir);
         float sunWrapped = pow(sunDot * 0.5 + 0.5, 2.0);
+
         vec3 sunLight = vec3(0.9, 0.85, 0.7) * sunWrapped * 0.5;
         vec3 totalLight = lightX + lightY + lightZ + sunLight;
         vec4 baseColor = vec4((Color.rgb * vertColor.rgb) * totalLight, Color.a * vertColor.a);
+
         if (fogDensity > 0.0) {
           float dist = distance(worldPos, cameraPos);
           float fogAmount = clamp(1.0 - exp(-dist * fogDensity), 0.0, 1.0);
           vec3 fogColor = vec3(0.02, 0.12, 0.25);
           return vec4(mix(baseColor.rgb, fogColor, fogAmount), baseColor.a);
         }
+        
         return baseColor;
       }
       vec3 sunDir = normalize(vec3(0.6, 0.7, 0.4));
       float sunDiff = max(dot(faceNormal, sunDir), 0.0);
+
       vec3 fillDir = normalize(vec3(-0.6, -0.5, -0.6));
       float fillDiff = max(dot(faceNormal, fillDir), 0.0);
       float skyDiff = max(faceNormal.y, 0.0);
       float facetLight = (sunDiff * 0.55) + (fillDiff * 0.35) + (skyDiff * 0.25) + 0.15;
+
       vec3 waterBase = vec3(0.05, 0.45, 0.65) * facetLight;
       vec3 viewDir = normalize(cameraPos - worldPos);
       vec3 reflectDir = reflect(-sunDir, faceNormal);
+
       float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
       vec3 sunSpecular = vec3(0.8, 0.95, 1.0) * spec * 1.0;
       float fresnel = pow(1.0 - max(dot(viewDir, faceNormal), 0.0), 2.5);
+
       vec3 skyReflect = vec3(0.3, 0.6, 0.85) * fresnel * 0.4;
       vec4 finalWater = vec4(waterBase + sunSpecular + skyReflect, 0.55);
+
       if (fogDensity > 0.0) {
         float dist = distance(worldPos, cameraPos);
         float fogAmount = clamp(1.0 - exp(-dist * fogDensity), 0.0, 1.0);
         vec3 fogColor = vec3(0.02, 0.12, 0.25);
         return vec4(mix(finalWater.rgb, fogColor, fogAmount), finalWater.a);
       }
+      
       return finalWater;
     }
   ]])
@@ -357,16 +404,19 @@ function lovr.load()
   }
   local raw_water_vertices = generate_water_vertices(water_size, grid_subdivision)
   local formatted_water_vertices = {}
+
   for i = 1, #raw_water_vertices do
     local v = raw_water_vertices[i]
     table.insert(formatted_water_vertices, {v[1], v[2], v[3], 1.0, 1.0, 1.0, 1.0})
   end
+
   water_mesh = lovr.graphics.newMesh(vertex_format, formatted_water_vertices)
   box_colliders = {}
 end
 
 function lovr.update(dt)
   local current_time = lovr.timer.getTime()
+
   if current_time % 1 < dt then
     local collider = world:newBoxCollider(
       lovr.math.randomNormal(terrain_size / 10, 0),
@@ -376,15 +426,19 @@ function lovr.update(dt)
     collider:setMass(lovr.math.random(1, 10))
     table.insert(box_colliders, collider)
   end
+
   local fluid_density = 5.0
   local gravity = 9.81
   local box_size = 1.0
   local half_bounds = water_size / 2
+
   for _, collider in ipairs(box_colliders) do
     local x, y, z = collider:getPosition()
     local bottom = y - (box_size / 2)
+
     if math.abs(x) <= half_bounds and math.abs(z) <= half_bounds then
       local local_water_level = physical_water_height(x, z, current_time)
+
       if bottom < local_water_level then
         local submerged = math.min(1.0, (local_water_level - bottom) / box_size)
         local bouyant_force = submerged * (box_size^3) * fluid_density * gravity
@@ -409,20 +463,24 @@ function lovr.draw(pass)
   local inside_water = math.abs(hx) <= half_bounds and math.abs(hz) <= half_bounds
   local wave_height = physical_water_height(hx, hz, current_time)
   local underwater = inside_water and (hy < wave_height)
+
   if underwater then
     lovr.graphics.setBackgroundColor(0.02, 0.10, 0.25)
   else
     lovr.graphics.setBackgroundColor(0x02b2f2)
   end
+
   pass:setShader(master_shader)
   pass:send('time', current_time)
   pass:send('cameraPos', {hx, hy, hz})
   pass:send('fogDensity', underwater and 0.15 or 0.0)
 
   pass:send('is_water', 0.0)
+
   for _, collider in ipairs(box_colliders) do
     local x, y, z, angle, ax, ay, az = collider:getPose()
     local mass = collider:getMass()
+
     if mass < 5.0 then
       pass:setColor(0.70, 0.45, 0.25)
     else
