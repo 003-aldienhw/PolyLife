@@ -1,7 +1,7 @@
 local MC = require "marching_tables"
 
 local world
-local chunk_size = 64
+local chunk_size = 92
 local chunk_height = 32
 local voxel_scale = 3.0
 local voxel_data = {}
@@ -43,13 +43,13 @@ local function generate_chunk_data()
 
         local island_noise = lovr.math.noise(wx * island_scale, wz * island_scale) * 0.75 + lovr.math.noise(wx * island_scale * 2.1 + 31.7, wz * island_scale * 2.1 - 18.4) * 0.25
         local island_mask = smooth_step((island_noise - island_threshold) / island_blend)
-        local broad_hills = (lovr.math.noise(wx * broad_scale, wz * broad_scale) - 0.5) * 16.0
+        local broad_hills = (lovr.math.noise(wx * broad_scale, wz * broad_scale) - 0.5) * 6.0
         local medium_hills = (lovr.math.noise(wx * medium_scale + 12.5, wz * medium_scale - 7.3) - 0.5) * 8.0
         local small_detail = (lovr.math.noise(wx * detail_scale - 21.2, wz * detail_scale + 15.8) - 0.5) * 3.0
-        local land_height = 10.0 + broad_hills + medium_hills + small_detail
+        local land_height = 4.0 + broad_hills + medium_hills + small_detail
 
-        local beach_height = 0.8
-        local seabed = -8.0 + (lovr.math.noise(wx * 0.035, wz * 0.035) - 0.5) * 5.0 + (lovr.math.noise(wx * 0.010, wz * 0.010) - 0.5) * 3.0
+        local beach_height = 1.8
+        local seabed = -0.2 + (lovr.math.noise(wx * 0.035, wz * 0.035) - 0.5) * 5.0 + (lovr.math.noise(wx * 0.010, wz * 0.010) - 0.5) * 3.0
         local underwater_t = smooth_step(clamp01(island_mask / 0.30))
         local underwater_height = seabed + (beach_height - seabed) * underwater_t
         local land_t = smooth_step(clamp01((island_mask - 0.10) / 0.90))
@@ -57,7 +57,7 @@ local function generate_chunk_data()
         local sloped_land = beach_height + (inland_height - beach_height) * land_t
         local terrain_height = underwater_height + (sloped_land - underwater_height) * underwater_t
 
-        local world_edge = (half_c - 1) * voxel_scale
+        local world_edge = (half_c - 0.1) * voxel_scale
         local boundary_distance = math.min(wx + world_edge, world_edge - wx, wz + world_edge, world_edge - wz)
         local transition_width = 45.0
         local edge_t = clamp01(boundary_distance / transition_width)
@@ -252,7 +252,7 @@ local function generate_terrain_mesh()
 
                   if avg_y < -3.0 then
                     r, g, b = 0.35, 0.35, 0.38
-                  elseif avg_y < 2.5 then
+                  elseif avg_y < 2.0 then
                     r, g, b = 0.88, 0.80, 0.60
                   elseif avg_y > 12.0 then
                     r, g, b = 0.45, 0.45, 0.48
