@@ -25,6 +25,46 @@ local function smooth_step(t)
   return t * t * (3.0 - 2.0 * t)
 end
 
+local function mix_color(a, b, t)
+  t = smooth_step(t)
+
+  return {
+    a[1] + (b[1] - a[1]) * t,
+    a[2] + (b[2] - a[2]) * t,
+    a[3] + (b[3] - a[3]) * t
+  }
+end
+
+local function get_terrain_color(x, y, z)
+  local deep_rock = {0.30, 0.34, 0.36}
+  local beach = {0.82, 0.69, 0.43}
+  local grass = {0.20, 0.48, 0.20}
+  local light_grass = {0.38, 0.62, 0.24}
+  local high_grass = {0.55, 0.65, 0.31}
+  local rock = {0.43, 0.42, 0.39}
+  local pale_rock = {0.66, 0.64, 0.58}
+  local color
+
+  if y < 2.5 then
+    color = mix_color(deep_rock, beach, (y + 2.0) / 4.5)
+  elseif y < 4.5 then
+    color = mix_color(beach, grass, (y - 2.5) / 2.0)
+  elseif y < 8.0 then
+    color = mix_color(grass, light_grass, (y - 4.5) / 3.5)
+  elseif y < 11.0 then
+    color = mix_color(light_grass, high_grass, (y - 8.0) / 3.0)
+  elseif y < 15.0 then
+    color = mix_color(high_grass, rock, (y - 11.0) / 4.0)
+  else
+    color = mix_color(rock, pale_rock, (y - 15.0) / 6.0)
+  end
+
+  local variation = (lovr.math.noise(x * 0.12, z * 0.12) - 0.5) * 0.12
+  local shade = 1.0 + variation
+
+  return clamp01(color[1] * shade), clamp01(color[2] * shade), clamp01(color[3] * shade)
+end
+
 local function generate_chunk_data()
   local half_c = chunk_size / 2
   local island_scale = 0.022
@@ -246,18 +286,11 @@ local function generate_terrain_mesh()
                 table.insert(physics_vertices, pt2)
                 table.insert(physics_vertices, pt3)
 
+                local avg_x = (pt1[1] + pt2[1] + pt3[1]) / 3.0
+                local avg_y = (pt1[2] + pt2[2] + pt3[2]) / 3.0
+                local avg_z = (pt1[3] + pt2[3] + pt3[3]) / 3.0
+                local r, g, b = get_terrain_color(avg_x, avg_y, avg_z)
                 for _, pt in ipairs({pt1, pt3, pt2}) do
-                  local avg_y = (pt1[2] + pt2[2] + pt3[2]) / 3.0
-                  local r, g, b = 0.20, 0.55, 0.25
-
-                  if avg_y < -3.0 then
-                    r, g, b = 0.35, 0.35, 0.38
-                  elseif avg_y < 2.0 then
-                    r, g, b = 0.88, 0.80, 0.60
-                  elseif avg_y > 12.0 then
-                    r, g, b = 0.45, 0.45, 0.48
-                  end
-
                   table.insert(render_vertices, {pt[1], pt[2], pt[3], r, g, b, 1.0})
                 end
               end
@@ -357,7 +390,8 @@ function lovr.load()
         float sunWrapped = pow(sunDot * 0.5 + 0.5, 2.0);
 
         vec3 sunLight = vec3(0.9, 0.85, 0.7) * sunWrapped * 0.5;
-        vec3 totalLight = lightX + lightY + lightZ + sunLight;
+        vec3 totalLight = lightX * 0.30 + lightY * 0.30 + lightZ * 0.30 + sunLight;
+        totalLight = clamp(totalLight, 0.0, 1.0);
         vec4 baseColor = vec4((Color.rgb * vertColor.rgb) * totalLight, Color.a * vertColor.a);
 
         if (fogDensity > 0.0) {
