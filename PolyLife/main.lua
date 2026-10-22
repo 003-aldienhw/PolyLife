@@ -35,36 +35,6 @@ local function mix_color(a, b, t)
   }
 end
 
-local function get_terrain_color(x, y, z)
-  local deep_rock = {0.30, 0.34, 0.36}
-  local beach = {0.82, 0.69, 0.43}
-  local grass = {0.20, 0.48, 0.20}
-  local light_grass = {0.38, 0.62, 0.24}
-  local high_grass = {0.55, 0.65, 0.31}
-  local rock = {0.43, 0.42, 0.39}
-  local pale_rock = {0.66, 0.64, 0.58}
-  local color
-
-  if y < 2.5 then
-    color = mix_color(deep_rock, beach, (y + 2.0) / 4.5)
-  elseif y < 4.5 then
-    color = mix_color(beach, grass, (y - 2.5) / 2.0)
-  elseif y < 8.0 then
-    color = mix_color(grass, light_grass, (y - 4.5) / 3.5)
-  elseif y < 11.0 then
-    color = mix_color(light_grass, high_grass, (y - 8.0) / 3.0)
-  elseif y < 15.0 then
-    color = mix_color(high_grass, rock, (y - 11.0) / 4.0)
-  else
-    color = mix_color(rock, pale_rock, (y - 15.0) / 6.0)
-  end
-
-  local variation = (lovr.math.noise(x * 0.12, z * 0.12) - 0.5) * 0.12
-  local shade = 1.0 + variation
-
-  return clamp01(color[1] * shade), clamp01(color[2] * shade), clamp01(color[3] * shade)
-end
-
 local function generate_chunk_data()
   local half_c = chunk_size / 2
   local island_scale = 0.022
@@ -111,6 +81,36 @@ local function generate_chunk_data()
       end
     end
   end
+end
+
+local function get_terrain_color(x, y, z)
+  local deep_rock = {0.30, 0.34, 0.36}
+  local beach = {0.82, 0.69, 0.43}
+  local grass = {0.20, 0.48, 0.20}
+  local light_grass = {0.38, 0.62, 0.24}
+  local high_grass = {0.55, 0.65, 0.31}
+  local rock = {0.43, 0.42, 0.39}
+  local pale_rock = {0.66, 0.64, 0.58}
+  local color
+
+  if y < 2.5 then
+    color = mix_color(deep_rock, beach, (y + 2.0) / 4.5)
+  elseif y < 4.5 then
+    color = mix_color(beach, grass, (y - 2.5) / 2.0)
+  elseif y < 8.0 then
+    color = mix_color(grass, light_grass, (y - 4.5) / 3.5)
+  elseif y < 11.0 then
+    color = mix_color(light_grass, high_grass, (y - 8.0) / 3.0)
+  elseif y < 15.0 then
+    color = mix_color(high_grass, rock, (y - 11.0) / 4.0)
+  else
+    color = mix_color(rock, pale_rock, (y - 15.0) / 6.0)
+  end
+
+  local variation = (lovr.math.noise(x * 0.12, z * 0.12) - 0.5) * 0.12
+  local shade = 1.0 + variation
+
+  return clamp01(color[1] * shade), clamp01(color[2] * shade), clamp01(color[3] * shade)
 end
 
 local function vertex_interp(p1, p2, val1, val2)
@@ -342,7 +342,7 @@ function lovr.load()
   world = lovr.physics.newWorld({
     allowSleep = false
   })
-  
+
   world:setGravity(0, -9.81, 0)
   generate_chunk_data()
   update_terrain_and_physics()
