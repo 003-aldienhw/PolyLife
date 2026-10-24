@@ -37,12 +37,10 @@ end
 
 local function generate_chunk_data()
   local half_c = chunk_size / 2
-  local island_scale = 0.022
-  local island_threshold = 0.39
-  local island_blend = 0.12
-  local broad_scale = 0.018
-  local medium_scale = 0.045
-  local detail_scale = 0.085
+  local island_scale = 0.016
+  local broad_scale = 0.015
+  local medium_scale = 0.04
+  local detail_scale = 0.08
 
   for z = 1, chunk_size do
     for y = 1, chunk_height do
@@ -52,30 +50,26 @@ local function generate_chunk_data()
         local wy = (y - 16.0) * voxel_scale
 
         local island_noise = lovr.math.noise(wx * island_scale, wz * island_scale) * 0.75 + lovr.math.noise(wx * island_scale * 2.1 + 31.7, wz * island_scale * 2.1 - 18.4) * 0.25
-        local island_mask = smooth_step(clamp01((island_noise - island_threshold) / island_blend))
-        local broad_hills = (lovr.math.noise(wx * broad_scale, wz * broad_scale) - 0.5) * 14.0
-        local medium_hills = (lovr.math.noise(wx * medium_scale + 12.5, wz * medium_scale - 7.3) - 0.5) * 4.0
-        local small_detail = (lovr.math.noise(wx * detail_scale - 21.2, wz * detail_scale + 15.8) - 0.5) * 0.6
-        local island_height = 4.0
-        local land_height = island_height + broad_hills + medium_hills + small_detail
-
-        local beach_height = 1.8
-        local seabed = -4.0
-        local seabed_noise = (lovr.math.noise(wx * 0.025, wz * 0.025) - 0.5) * 2.0 + (lovr.math.noise(wx * 0.010, wz * 0.010) - 0.5) * 2.0
-        seabed = seabed + seabed_noise
-        local shore_t = clamp01(island_mask / 0.80)
-        shore_t = shore_t * shore_t
-        local underwater_height = seabed + (beach_height - seabed) * shore_t
-        local inland_t = smooth_step(clamp01(island_mask - 0.35) / 0.65)
-        local inland_height = beach_height + (land_height - beach_height) * inland_t
-        local terrain_height = underwater_height + (inland_height - underwater_height) * shore_t
+        local sea_level_noise = 0.42
+        local beach_slope_width = 0.18
+        local dist_from_coast = island_noise - sea_level_noise
+        local coast_t = clamp01((dist_from_coast + beach_slope_width) / (beach_slope_width * 2.0))
+        local beach_ramp = smooth_step(coast_t)
+        local broad_hills = (lovr.math.noise(wx * broad_scale, wz * broad_scale) - 0.5) * 8.0
+        local medium_hills = (lovr.math.noise(wx * medium_scale + 12.5, wz * medium_scale - 7.3) - 0.5) * 2.5
+        local small_detail = (lovr.math.noise(wx * detail_scale - 21.2, wz * detail_scale + 15.8) - 0.5) * 0.4
+        local hill_mask = smooth_step(clamp01((coast_t - 0.5) / 0.5))
+        local surface_hills = (broad_hills + medium_hills + small_detail) * hill_mask
+        local deep_seabed = -4.0
+        local max_land_height = 10.0
+        local terrain_height = deep_seabed + (max_land_height - deep_seabed) * beach_ramp + surface_hills
 
         local world_edge = (half_c - 0.1) * voxel_scale
         local boundary_distance = math.min(wx + world_edge, world_edge - wx, wz + world_edge, world_edge - wz)
         local transition_width = 60.0
         local edge_t = clamp01(boundary_distance / transition_width)
-        local deep_seabed = -20.0
-        terrain_height = deep_seabed + (terrain_height - deep_seabed) * edge_t
+        local map_deep_seabed = -20.0
+        terrain_height = map_deep_seabed + (terrain_height - map_deep_seabed) * edge_t
 
         local density = terrain_height - wy
         local idx = get_voxel_index(x, y, z)
