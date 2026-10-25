@@ -27,5 +27,5 @@ function lovr.draw(pass)
     lovr.graphics.setBackgroundColor(0x02b2f2)
   end
 
-  World.draw(pass, current_time)
+  World.draw(pass, current_time, {hx, hy, hz}, underwater)
 end

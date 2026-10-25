@@ -473,9 +473,11 @@ function World.update(dt, current_time)
   world:update(dt)
 end
 
-function World.draw(pass, current_time)
+function World.draw(pass, current_time, cameraPos, underwater)
   pass:setShader(master_shader)
   pass:send('time', current_time)
+  pass:send('cameraPos', cameraPos)
+  pass:send('fogDensity', underwater and 0.15 or 0.0)
   pass:send('is_water', 0.0)
 
   for _, collider in ipairs(box_colliders) do
