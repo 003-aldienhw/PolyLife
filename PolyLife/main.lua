@@ -12,8 +12,14 @@ function lovr.update(dt)
   Player.update(dt)
 end
 
+function lovr.mousemoved(x, y, dx, dy)
+  Player.mousemoved(x, y, dx, dy)
+end
+
 function lovr.draw(pass)
-  local hx, hy, hz = Player.getData()
+  local hx, hy, hz, yaw, pitch = Player.getData()
+  local pose = lovr.math.newMat4():translate(hx, hy, hz):rotate(yaw, 0, 1, 0):rotate(pitch, 1, 0, 0)
+  pass:setViewPose(1, pose)
   local current_time = lovr.timer.getTime()
   local water_size = World.getWaterSize()
   local half_bounds = water_size / 2

@@ -17,6 +17,7 @@ local ground_collider = nil
 local master_shader = nil
 local water_mesh = nil
 local box_colliders = {}
+local player_collider = nil
 
 local function get_voxel_index(x, y, z)
   if x < 1 or x > chunk_size or y < 1 or y > chunk_height or z < 1 or z > chunk_size then
@@ -433,6 +434,12 @@ function World.update_terrain_and_physics()
   end
 end
 
+function World.createPlayerCollider(x, y, z)
+    player_collider = world:newCapsuleCollider(x, y, z, 0.4, 1.0)
+    player_collider:setMass(75.0)
+    return player_collider
+end
+
 function World.update(dt, current_time)
   if current_time % 1 < dt then
     local collider = world:newBoxCollider(
@@ -451,7 +458,7 @@ function World.update(dt, current_time)
 
   for _, collider in ipairs(box_colliders) do
     local x, y, z = collider:getPosition()
-    local bottom = y - (box_size / 2)
+    local bottom = y - 0.5
 
     if math.abs(x) <= half_bounds and math.abs(z) <= half_bounds then
       local local_water_level = World.physical_water_height(x, z, current_time)
@@ -470,6 +477,30 @@ function World.update(dt, current_time)
       end
     end
   end
+
+  if player_collider then
+    local px, py, pz = player_collider:getPosition()
+    local p_bottom = py - 0.9
+
+    if math.abs(px) <= half_bounds and math.abs(pz) <= half_bounds then
+        local water_lvl = World.physical_water_height(px, pz, current_time)
+
+        if p_bottom < water_lvl then
+            local submerged = math.min(1.0, (water_lvl - p_bottom) / 1.8)
+            local bouyant_force = submerged * 75.0 * 1.2 * gravity
+            player_collider:applyForce(0, bouyant_force, 0)
+
+            if lovr.system.isKeyDown('space') then
+                player_collider:applyForce(0, 450.0, 0)
+            end
+
+            local vx, vy, vz = player_collider:getLinearVelocity()
+            local drag = 3.5 * submerged
+            player_collider:applyForce(-vx * drag, -vy * drag, -vz * drag)
+        end
+    end
+  end
+
   world:update(dt)
 end
 
