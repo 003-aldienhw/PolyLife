@@ -49,6 +49,14 @@ function Player.update(dt)
         end
     end
 
+    if lovr.system.isKeyDown('escape') then
+        lovr.system.setMouseMode("normal")
+    end
+
+    if lovr.system.isKeyDown('backspace') then
+        lovr.system.setMouseMode("relative")
+    end
+
     collider:setLinearVelocity(dx * speed, vy, dz * speed)
 end
 
