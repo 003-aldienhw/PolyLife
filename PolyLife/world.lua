@@ -440,6 +440,58 @@ function World.createPlayerCollider(x, y, z)
     return player_collider
 end
 
+function World.isPlayerGrounded()
+  if not player_collider then return false end
+  local x, y, z = player_collider:getPosition()
+  local grounded = false
+  world:raycast(x, y - 0.4, z, x, y - 1.1, z, nil, function(collider, shape, hx, hy, hz, nx, ny, nz, tri, fraction)
+    if collider == player_collider then
+      return 1.0
+    end
+    if ny > 0.5 then
+      grounded = true
+      return 0.0
+    end
+    return 1.0
+  end)
+  return grounded
+end
+
+function World.getMovementMultiplier(x, y, z, dx, dz, strength)
+  if not player_collider then return false end
+  local start_x = x + dx * 0.45
+  local start_z = z + dz * 0.45
+  local target_x = x + dx * 0.9
+  local target_z = z + dz * 0.9
+  local hitCollider = world:raycast(start_x, y, start_z, target_x, y, target_z)
+
+  if hitCollider and hitCollider ~= player_collider then
+    local isBox = false
+    for _, bCol in ipairs(box_colliders) do
+      if bCol == hitCollider then
+        isBox = true
+        break
+      end
+    end
+
+    if isBox then
+      local mass = hitCollider:getMass()
+      local ratio = mass / strength
+
+      hitCollider:applyForce(dx * (40.0 / math.max(0.5, ratio)), 0, dz * (40.0 / math.max(0.5, ratio)))
+
+      if ratio > 2.0 then
+        return 0.05
+      else
+        return math.max(0.1, 1.0 - (mass / (strength * 1.5)))
+      end
+    else
+      return 0.0
+    end
+  end
+  return 1.0
+end
+
 function World.update(dt, current_time)
   if current_time % 1 < dt then
     local collider = world:newBoxCollider(
@@ -447,7 +499,7 @@ function World.update(dt, current_time)
       lovr.math.randomNormal(1, 20),
       lovr.math.randomNormal(terrain_size / 10, 0),
       1)
-    collider:setMass(lovr.math.random(1, 10))
+    collider:setMass(lovr.math.random(1, 40))
     table.insert(box_colliders, collider)
   end
 
@@ -515,7 +567,7 @@ function World.draw(pass, current_time, cameraPos, underwater)
     local x, y, z, angle, ax, ay, az = collider:getPose()
     local mass = collider:getMass()
 
-    if mass < 5.0 then
+    if mass < 15.0 then
       pass:setColor(0.70, 0.45, 0.25)
     else
       pass:setColor(0.35, 0.35, 0.35)

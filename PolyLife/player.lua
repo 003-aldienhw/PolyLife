@@ -3,6 +3,7 @@ local Player = {}
 
 local collider = nil
 local speed = 6.0
+local player_strength = 15.0
 local yaw = 0.0
 local pitch = 0.0
 
@@ -22,7 +23,8 @@ end
 
 function Player.update(dt)
     if not collider then return end
-    local vx, vy, vz = collider:getLinearVelocity()
+    local vz, vy, vz = collider:getLinearVelocity()
+    local px, py, pz = collider:getPosition()
 
     local forward_x = -math.sin(yaw)
     local forward_z = -math.cos(yaw)
@@ -39,12 +41,15 @@ function Player.update(dt)
     local len = math.sqrt(dx * dx + dz * dz)
     if len > 0 then
         dx, dz = dx / len, dz / len
+
+        local speed_multiplier = World.getMovementMultiplier(px, py, pz, dx, dz, player_strength)
+        dx, dz = dx * speed * speed_multiplier, dz * speed * speed_multiplier
     else
         dx, dz = 0, 0
     end
 
     if lovr.system.isKeyDown('space') then
-        if math.abs(vy) < 0.1 then
+        if World.isPlayerGrounded() then
             vy = 5.5
         end
     end
@@ -57,7 +62,7 @@ function Player.update(dt)
         lovr.system.setMouseMode("relative")
     end
 
-    collider:setLinearVelocity(dx * speed, vy, dz * speed)
+    collider:setLinearVelocity(dx, vy, dz)
 end
 
 function Player.getData()
