@@ -444,7 +444,8 @@ function World.isPlayerGrounded()
   if not player_collider then return false end
   local x, y, z = player_collider:getPosition()
   local grounded = false
-  world:raycast(x, y - 0.4, z, x, y - 1.1, z, nil, function(collider, shape, hx, hy, hz, nx, ny, nz, tri, fraction)
+  world:raycast(x, y - 0.4, z, x, y - 0.5, z, nil, function(collider, shape, hx, hy, hz, nx, ny, nz, tri, fraction)
+
     if collider == player_collider then
       return 1.0
     end
