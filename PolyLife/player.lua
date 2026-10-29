@@ -24,7 +24,7 @@ end
 
 function Player.update(dt)
     if not collider then return end
-    local vz, vy, vz = collider:getLinearVelocity()
+    local vx, vy, vz = collider:getLinearVelocity()
     local px, py, pz = collider:getPosition()
 
     local forward_x = -math.sin(yaw)
@@ -52,8 +52,8 @@ function Player.update(dt)
         dx, dz = 0, 0
     end
 
-    if lovr.system.isKeyDown('space') then
-        if World.isPlayerGrounded() then
+    if World.isPlayerGrounded() then
+        if lovr.system.isKeyDown('space') then
             vy = 5.5
         end
     end

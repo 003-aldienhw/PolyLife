@@ -500,7 +500,12 @@ function World.update(dt, current_time)
       lovr.math.randomNormal(1, 20),
       lovr.math.randomNormal(terrain_size / 10, 0),
       1)
-    collider:setMass(lovr.math.random(1, 40))
+    local mass = lovr.math.random(1, 40)
+    collider:setMass(mass)
+    collider:setFriction(0.9)
+    collider:setRestitution(0.0)
+    collider:setLinearDamping(0.15)
+    collider:setAngularDamping(0.5)
     table.insert(box_colliders, collider)
   end
 
