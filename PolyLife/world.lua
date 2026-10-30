@@ -18,6 +18,7 @@ local master_shader = nil
 local water_mesh = nil
 local box_colliders = {}
 local player_collider = nil
+local player_contact_boxes = {}
 
 local function get_voxel_index(x, y, z)
   if x < 1 or x > chunk_size or y < 1 or y > chunk_height or z < 1 or z > chunk_size then
@@ -219,6 +220,28 @@ function World.load()
   world:setGravity(0, -9.81, 0)
   generate_chunk_data()
   World.update_terrain_and_physics()
+  world:setCallbacks({
+    contact = function (a, b, contact)
+      if not player_collider then return end
+
+      local other = nil
+
+      if a == player_collider then
+        other = b
+      elseif b == player_collider then
+        other = a
+      end
+
+      if other then
+        for _, box in ipairs(box_colliders) do
+          if box == other then
+            player_contact_boxes[box] = true
+            break
+          end
+        end
+      end
+    end
+  })
 
   master_shader = lovr.graphics.newShader([[
     out vec3 worldPos;
@@ -458,39 +481,20 @@ function World.isPlayerGrounded()
   return grounded
 end
 
-function World.getMovementMultiplier(x, y, z, dx, dz, strength)
-  if not player_collider then return false end
-  local start_x = x + dx * 0.45
-  local start_z = z + dz * 0.45
-  local target_x = x + dx * 0.9
-  local target_z = z + dz * 0.9
-  local hitCollider = world:raycast(start_x, y, start_z, target_x, y, target_z)
+function World.getMovementMultiplier(dx, dz, strength)
+  if not player_collider then return 1.0 end
 
-  if hitCollider and hitCollider ~= player_collider then
-    local isBox = false
-    for _, bCol in ipairs(box_colliders) do
-      if bCol == hitCollider then
-        isBox = true
-        break
-      end
-    end
+  local multiplier = 1.0
 
-    if isBox then
-      local mass = hitCollider:getMass()
-      local ratio = mass / strength
-
-      hitCollider:applyForce(dx * (40.0 / math.max(0.5, ratio)), 0, dz * (40.0 / math.max(0.5, ratio)))
-
-      if ratio > 2.0 then
-        return 0.05
-      else
-        return math.max(0.1, 1.0 - (mass / (strength * 1.5)))
-      end
-    else
-      return 0.0
-    end
+  for box in pairs(player_contact_boxes) do
+    local mass = box:getMass()
+    local ratio = mass / math.max(strength, 1.0)
+    local box_multiplier = math.max(0.25, 1.0 / (1.0 + ratio * 1.5))
+    multiplier = math.min(multiplier, box_multiplier)
+    box:applyForce(dx * 180.0, 0, dz * 180.0)
   end
-  return 1.0
+
+  return multiplier
 end
 
 function World.update(dt, current_time)
@@ -559,6 +563,7 @@ function World.update(dt, current_time)
     end
   end
 
+  player_contact_boxes = {}
   world:update(dt)
 end
 

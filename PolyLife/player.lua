@@ -46,11 +46,15 @@ function Player.update(dt)
     if len > 0 then
         dx, dz = dx / len, dz / len
 
-        local speed_multiplier = World.getMovementMultiplier(px, py, pz, dx, dz, player_strength)
-        dx, dz = dx * speed * speed_multiplier, dz * speed * speed_multiplier
-    else
-        dx, dz = 0, 0
+        local multiplier = World.getMovementMultiplier(dx, dz, player_strength)
+        dx, dz = dx * speed * multiplier, dz * speed * multiplier
     end
+
+    local smoothing = 12.0
+    local alpha = 1.0 - math.exp(-smoothing * dt)
+
+    vx = vx + (dx - vx) * alpha
+    vz = vz + (dz - vz) * alpha
 
     if World.isPlayerGrounded() then
         if lovr.system.isKeyDown('space') then
@@ -66,7 +70,7 @@ function Player.update(dt)
         lovr.system.setMouseMode("relative")
     end
 
-    collider:setLinearVelocity(dx, vy, dz)
+    collider:setLinearVelocity(vx, vy, vz)
 end
 
 function Player.getData()
