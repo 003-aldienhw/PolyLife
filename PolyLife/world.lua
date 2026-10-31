@@ -457,6 +457,55 @@ function World.update_terrain_and_physics()
   end
 end
 
+local function modify_terrain_sphere(cx, cy, cz, radius, operation)
+  local half_x = chunk_size / 2
+  local half_z = chunk_size / 2
+  local surface_level = 16.0
+
+  local min_x = math.max(1, math.floor(cx / voxel_scale + half_x - radius / voxel_scale) - 1)
+  local max_x = math.min(chunk_size, math.ceil(cx / voxel_scale + half_x + radius / voxel_scale) + 1)
+  local min_y = math.max(1, math.floor(cx / voxel_scale + surface_level - radius / voxel_scale) - 1)
+  local max_y = math.min(chunk_height, math.ceil(cx / voxel_scale + surface_level + radius / voxel_scale) + 1)
+  local min_z = math.max(1, math.floor(cz / voxel_scale + half_x - radius / voxel_scale) - 1)
+  local max_z = math.min(chunk_size, math.ceil(cz / voxel_scale + half_x + radius / voxel_scale) + 1)
+
+  for z = min_z, max_z do
+    for y = min_y, max_y do
+      for x = min_x, max_x do
+        local wx = (x - half_x) * voxel_scale
+        local wy = (y - surface_level) * voxel_scale
+        local wz = (z - half_z) * voxel_scale
+
+        local dx = wx - cx
+        local dy = wy - cy
+        local dz = wz - cz
+
+        local distance = math.sqrt(dx * dx + dy * dy + dz * dz)
+        if distance < radius then
+          local idx = get_voxel_index(x, y, z)
+          local density = voxel_data[idx]
+
+          if operation == "dig" then
+            if idx then voxel_data[idx] = math.min(density, distance - radius) end
+          elseif operation == "add" then
+            if idx then voxel_data[idx] = math.max(density, distance - radius) end
+          end
+        end
+      end
+    end
+  end
+
+  World.update_terrain_and_physics()
+end
+
+function World.digTerrain(x, y, z, radius)
+  modify_terrain_sphere(x, y, z, radius, "dig")
+end
+
+function World.addTerrain(x, y, z, radius)
+  modify_terrain_sphere(x, y, z, radius, "add")
+end
+
 function World.createPlayerCollider(x, y, z)
     player_collider = world:newCapsuleCollider(x, y, z, 0.4, 1.0)
     player_collider:setMass(75.0)

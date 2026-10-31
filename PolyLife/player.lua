@@ -4,7 +4,7 @@ local Player = {}
 local collider = nil
 local current_speed = 6.0
 local sprint_speed = 12.0
-local player_strength = 15.0
+local player_strength = 5.0
 local yaw = 0.0
 local pitch = 0.0
 
