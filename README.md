@@ -9,6 +9,22 @@
 
 <p>For further information about LÖVR, visit its official website: https://lovr.org</p>
 
+<h2 align="left">Game Structure</h2>
+
+```bash
+lovr.exe
+│
+├── conf.lua
+│
+├── main.lua
+       │
+       └── world.lua
+       │      │
+       │      └── marching_tables.lua
+       │
+       └── player.lua
+```
+
 <h2 align="left">How to run (If interested)</h2>
 
 - <h3>Clone this repository</h3>
