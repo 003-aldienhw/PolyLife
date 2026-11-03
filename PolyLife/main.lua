@@ -16,6 +16,10 @@ function lovr.mousemoved(x, y, dx, dy)
   Player.mousemoved(x, y, dx, dy)
 end
 
+function lovr.keypressed(key)
+  Player.keypressed(key)
+end
+
 function lovr.draw(pass)
   local hx, hy, hz, yaw, pitch = Player.getData()
   local pose = lovr.math.newMat4():translate(hx, hy, hz):rotate(yaw, 0, 1, 0):rotate(pitch, 1, 0, 0)

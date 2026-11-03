@@ -70,15 +70,15 @@ function Player.update(dt)
         lovr.system.setMouseMode("relative")
     end
 
-    if lovr.system.isKeyDown('k') then
-        World.digTerrain(0, 5, -10, 3)
-    end
+    collider:setLinearVelocity(vx, vy, vz)
+end
 
-    if lovr.system.isKeyDown('l') then
+function Player.keypressed(key)
+    if key == 'k' then
+        World.digTerrain(0, 5, -10, 3)
+    elseif key == 'l' then
         World.addTerrain(0, 5, -10, 3)
     end
-
-    collider:setLinearVelocity(vx, vy, vz)
 end
 
 function Player.getData()

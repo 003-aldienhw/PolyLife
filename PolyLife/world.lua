@@ -443,6 +443,10 @@ function World.update_terrain_and_physics()
     end
   end
 
+  local new_ground_mesh = nil
+  local new_physics_mesh = nil
+  local new_ground_collider = nil
+
   if #render_vertices > 0 then
     local color_format = {
       { 'VertexPosition', 'vec3' },
@@ -451,10 +455,14 @@ function World.update_terrain_and_physics()
     local pos_format = {
       { 'VertexPosition', 'vec3' }
     }
-    ground_mesh = lovr.graphics.newMesh(color_format, render_vertices)
-    physics_mesh = lovr.graphics.newMesh(pos_format, physics_vertices)
-    ground_collider = world:newMeshCollider(physics_mesh)
+    new_ground_mesh = lovr.graphics.newMesh(color_format, render_vertices)
+    new_physics_mesh = lovr.graphics.newMesh(pos_format, physics_vertices)
+    new_ground_collider = world:newMeshCollider(new_physics_mesh)
   end
+
+  ground_mesh = new_ground_mesh
+  physics_mesh = new_physics_mesh
+  ground_collider = new_ground_collider
 end
 
 local function modify_terrain_sphere(cx, cy, cz, radius, operation)
