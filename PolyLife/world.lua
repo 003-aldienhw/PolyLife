@@ -464,8 +464,8 @@ local function modify_terrain_sphere(cx, cy, cz, radius, operation)
 
   local min_x = math.max(1, math.floor(cx / voxel_scale + half_x - radius / voxel_scale) - 1)
   local max_x = math.min(chunk_size, math.ceil(cx / voxel_scale + half_x + radius / voxel_scale) + 1)
-  local min_y = math.max(1, math.floor(cx / voxel_scale + surface_level - radius / voxel_scale) - 1)
-  local max_y = math.min(chunk_height, math.ceil(cx / voxel_scale + surface_level + radius / voxel_scale) + 1)
+  local min_y = math.max(1, math.floor(cy / voxel_scale + surface_level - radius / voxel_scale) - 1)
+  local max_y = math.min(chunk_height, math.ceil(cy / voxel_scale + surface_level + radius / voxel_scale) + 1)
   local min_z = math.max(1, math.floor(cz / voxel_scale + half_x - radius / voxel_scale) - 1)
   local max_z = math.min(chunk_size, math.ceil(cz / voxel_scale + half_x + radius / voxel_scale) + 1)
 
@@ -488,7 +488,7 @@ local function modify_terrain_sphere(cx, cy, cz, radius, operation)
           if operation == "dig" then
             if idx then voxel_data[idx] = math.min(density, distance - radius) end
           elseif operation == "add" then
-            if idx then voxel_data[idx] = math.max(density, distance - radius) end
+            if idx then voxel_data[idx] = math.max(density, radius - distance) end
           end
         end
       end
