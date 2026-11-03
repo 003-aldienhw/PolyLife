@@ -12,7 +12,7 @@
 <h2 align="left">Game Structure</h2>
 
 ```bash
-lovr.exe
+Polylife
 │
 ├── conf.lua
 │
