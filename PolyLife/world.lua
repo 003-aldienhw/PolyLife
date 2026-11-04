@@ -344,11 +344,6 @@ function World.load()
 end
 
 function World.update_terrain_and_physics()
-  if ground_collider then
-    ground_collider:destroy()
-    ground_collider = nil
-  end
-
   local render_vertices = {}
   local physics_vertices = {}
 
@@ -458,11 +453,19 @@ function World.update_terrain_and_physics()
     new_ground_mesh = lovr.graphics.newMesh(color_format, render_vertices)
     new_physics_mesh = lovr.graphics.newMesh(pos_format, physics_vertices)
     new_ground_collider = world:newMeshCollider(new_physics_mesh)
+  else
+    return
   end
+
+  local old_ground_collider = ground_collider
 
   ground_mesh = new_ground_mesh
   physics_mesh = new_physics_mesh
   ground_collider = new_ground_collider
+
+  if old_ground_collider then
+    old_ground_collider:destroy()
+  end
 end
 
 local function modify_terrain_sphere(cx, cy, cz, radius, operation)
@@ -524,7 +527,7 @@ function World.isPlayerGrounded()
   if not player_collider then return false end
   local x, y, z = player_collider:getPosition()
   local grounded = false
-  world:raycast(x, y - 0.4, z, x, y - 0.5, z, nil, function(collider, shape, hx, hy, hz, nx, ny, nz, tri, fraction)
+  world:raycast(x, y - 0.4, z, x, y - 1.0, z, nil, function(collider, shape, hx, hy, hz, nx, ny, nz, tri, fraction)
 
     if collider == player_collider then
       return 1.0
