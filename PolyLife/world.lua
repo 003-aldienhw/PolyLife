@@ -14,6 +14,20 @@ local ground_mesh = nil
 local physics_mesh = nil
 local ground_collider = nil
 
+local CHUNK_XZ = 23
+local CHUNK_Y = 16
+
+local terrain_chunks = {}
+local rebuild_queue = {}
+local rebuild_queue_set = {}
+
+local chunk = {
+  mesh = nil,
+  physics_mesh = nil,
+  collider = nil,
+  dirty = false
+}
+
 local master_shader = nil
 local water_mesh = nil
 local box_colliders = {}
@@ -527,7 +541,7 @@ function World.isPlayerGrounded()
   if not player_collider then return false end
   local x, y, z = player_collider:getPosition()
   local grounded = false
-  world:raycast(x, y - 0.4, z, x, y - 1.0, z, nil, function(collider, shape, hx, hy, hz, nx, ny, nz, tri, fraction)
+  world:raycast(x, y, z, x, y - 0.6, z, nil, function(collider, shape, hx, hy, hz, nx, ny, nz, tri, fraction)
 
     if collider == player_collider then
       return 1.0
