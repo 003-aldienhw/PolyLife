@@ -16,7 +16,7 @@ Polylife
 │
 ├── conf.lua
 │
-├── main.lua
+└── main.lua
        │
        └── world.lua
        │      │
