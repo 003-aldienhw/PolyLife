@@ -10,23 +10,12 @@ local terrain_size = 260
 local water_size = 280
 local grid_subdivision = 120
 
-local ground_mesh = nil
-local physics_mesh = nil
-local ground_collider = nil
-
 local CHUNK_XZ = 23
 local CHUNK_Y = 16
 
 local terrain_chunks = {}
 local rebuild_queue = {}
 local rebuild_queue_set = {}
-
-local chunk = {
-  mesh = nil,
-  physics_mesh = nil,
-  collider = nil,
-  dirty = false
-}
 
 local master_shader = nil
 local water_mesh = nil
@@ -100,6 +89,40 @@ local function generate_chunk_data()
         local idx = get_voxel_index(x, y, z)
 
         if idx then voxel_data[idx] = density end
+      end
+    end
+  end
+end
+
+local function create_terrain_chunks()
+  local cells_x = chunk_size - 1
+  local cells_y = chunk_height - 1
+  local cells_z = chunk_size - 1
+
+  local count_x = math.ceil(cells_x / CHUNK_XZ)
+  local count_y = math.ceil(cells_y / CHUNK_Y)
+  local count_z = math.ceil(cells_z / CHUNK_XZ)
+
+  for cz = 1, count_z do
+    for cy = 1, count_y do
+      for cx = 1, count_x do
+        local chunk = {
+          x = (cx - 1) * CHUNK_XZ + 1,
+          y = (cy - 1) * CHUNK_Y + 1,
+          z = (cz - 1) * CHUNK_XZ + 1,
+
+          max_x = math.min(cx * CHUNK_XZ, cells_x),
+          max_y = math.min(cy * CHUNK_Y, cells_y),
+          max_z = math.min(cz * CHUNK_XZ, cells_z),
+
+          mesh = nil,
+          physics_mesh = nil,
+          collider = nil
+        }
+
+        chunk.key = cx .. ":" .. cy .. ":" .. cz
+
+        terrain_chunks[chunk.key] = chunk
       end
     end
   end
@@ -233,7 +256,12 @@ function World.load()
 
   world:setGravity(0, -9.81, 0)
   generate_chunk_data()
-  World.update_terrain_and_physics()
+  create_terrain_chunks()
+
+  for _, chunk in ipairs(terrain_chunks) do
+    World.rebuild_chunk(chunk)
+  end
+
   world:setCallbacks({
     contact = function (a, b, contact)
       if not player_collider then return end
@@ -357,7 +385,7 @@ function World.load()
   water_mesh = lovr.graphics.newMesh(vertex_format, formatted_water_vertices)
 end
 
-function World.update_terrain_and_physics()
+function World.rebuild_chunk(chunk)
   local render_vertices = {}
   local physics_vertices = {}
 
@@ -376,9 +404,9 @@ function World.update_terrain_and_physics()
   local half_z = chunk_size / 2
   local surface_level = 16.0
 
-  for z = 1, chunk_size - 1 do
-    for y = 1, chunk_height - 1 do
-      for x = 1, chunk_size - 1 do
+  for z = chunk.z, chunk.max_z do
+    for y = chunk.y, chunk.max_y do
+      for x = chunk.x, chunk.max_x do
         local densities = {}
         local positions = {}
 
@@ -441,7 +469,7 @@ function World.update_terrain_and_physics()
                 local avg_y = (pt1[2] + pt2[2] + pt3[2]) / 3.0
                 local avg_z = (pt1[3] + pt2[3] + pt3[3]) / 3.0
                 local r, g, b = get_terrain_color(avg_x, avg_y, avg_z)
-                for _, pt in ipairs({pt1, pt3, pt2}) do
+                for _, pt in ipairs({pt1, pt2, pt3}) do
                   table.insert(render_vertices, {pt[1], pt[2], pt[3], r, g, b, 1.0})
                 end
               end
@@ -471,14 +499,38 @@ function World.update_terrain_and_physics()
     return
   end
 
-  local old_ground_collider = ground_collider
+  local old_collider = chunk.collider
 
-  ground_mesh = new_ground_mesh
-  physics_mesh = new_physics_mesh
-  ground_collider = new_ground_collider
+  chunk.mesh = new_ground_mesh
+  chunk.physics_mesh = new_physics_mesh
+  chunk.collider = new_ground_collider
 
-  if old_ground_collider then
-    old_ground_collider:destroy()
+  if old_collider then
+    old_collider:destroy()
+  end
+end
+
+local function queue_chunks(chunk)
+  if rebuild_queue_set[chunk.key] then
+    return
+  end
+
+  rebuild_queue_set[chunk.key] = true
+  table.insert(rebuild_queue, chunk)
+end
+
+local function process_rebuild_queue()
+  local chunks_per_frame = 1
+
+  for _ = 1, chunks_per_frame do
+    local chunk = table.remove(rebuild_queue, 1)
+
+    if not chunk then
+      break
+    end
+
+    rebuild_queue_set[chunk.key] = nil
+    World.rebuild_chunk(chunk)
   end
 end
 
@@ -520,7 +572,9 @@ local function modify_terrain_sphere(cx, cy, cz, radius, operation)
     end
   end
 
-  World.update_terrain_and_physics()
+  for _, chunk in pairs(terrain_chunks) do
+    queue_chunks(chunk)
+  end
 end
 
 function World.digTerrain(x, y, z, radius)
@@ -638,6 +692,7 @@ function World.update(dt, current_time)
   end
 
   player_contact_boxes = {}
+  process_rebuild_queue()
   world:update(dt)
 end
 
@@ -660,9 +715,10 @@ function World.draw(pass, current_time, cameraPos, underwater)
     pass:cube(x, y, z, 1, angle, ax, ay, az)
   end
 
-  if ground_mesh then
-    pass:setColor(1, 1, 1, 1)
-    pass:draw(ground_mesh)
+  for _, chunk in pairs(terrain_chunks) do
+    if chunk.mesh then
+      pass:draw(chunk.mesh)
+    end
   end
 
   pass:send('is_water', 1.0)
