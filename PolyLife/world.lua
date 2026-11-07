@@ -588,6 +588,39 @@ function World.addTerrain(x, y, z, radius)
   modify_terrain_sphere(x, y, z, radius, "add")
 end
 
+function World.getTerrainTarget(ox, oy, oz, dx, dy, dz, max_distance)
+  local target = nil
+
+  local ex = ox + dx * max_distance
+  local ey = oy + dy * max_distance
+  local ez = oz + dz * max_distance
+
+  world:raycast(ox, oy, oz, ex, ey, ez, nil, function(collider, shape, hx, hy, hz, nx, ny, nz)
+    if collider == player_collider then
+      return 1.0
+    end
+
+    for _, box in ipairs(box_colliders) do
+      if collider == box then
+        return 1.0
+      end
+    end
+
+    target = {
+      x = hx,
+      y = hy,
+      z = hz,
+      nx = nx,
+      ny = ny,
+      nz = nz,
+    }
+
+    return 0.0
+  end)
+
+  return target
+end
+
 function World.createPlayerCollider(x, y, z)
     player_collider = world:newCapsuleCollider(x, y, z, 0.4, 1.0)
     player_collider:setMass(75.0)
@@ -699,7 +732,7 @@ function World.update(dt, current_time)
   world:update(dt)
 end
 
-function World.draw(pass, current_time, cameraPos, underwater)
+function World.draw(pass, current_time, cameraPos, underwater, edit_target, editing_mode, edit_radius)
   pass:setShader(master_shader)
   pass:send('time', current_time)
   pass:send('cameraPos', cameraPos)
@@ -731,6 +764,12 @@ function World.draw(pass, current_time, cameraPos, underwater)
   pass:draw(water_mesh)
 
   pass:setShader()
+
+  if editing_mode and edit_target then
+    pass:setColor(0.2, 1.0, 0.3, 0.3)
+    pass:sphere(edit_target.x, edit_target.y, edit_target.z, edit_radius)
+    pass:setColor(1, 1, 1, 1)
+  end
 end
 
 function World.getWaterSize() return water_size end

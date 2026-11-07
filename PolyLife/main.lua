@@ -20,6 +20,10 @@ function lovr.keypressed(key)
   Player.keypressed(key)
 end
 
+function lovr.mousepressed(x, y, button)
+  Player.mousepressed(x, y, button)
+end
+
 function lovr.draw(pass)
   local hx, hy, hz, yaw, pitch = Player.getData()
   local pose = lovr.math.newMat4():translate(hx, hy, hz):rotate(yaw, 0, 1, 0):rotate(pitch, 1, 0, 0)
@@ -37,5 +41,7 @@ function lovr.draw(pass)
     lovr.graphics.setBackgroundColor(0x02b2f2)
   end
 
-  World.draw(pass, current_time, {hx, hy, hz}, underwater)
+  local edit_target, editing_mode, edit_radius = Player.getEditData()
+
+  World.draw(pass, current_time, {hx, hy, hz}, underwater, edit_target, editing_mode, edit_radius)
 end

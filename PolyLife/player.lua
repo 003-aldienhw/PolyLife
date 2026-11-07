@@ -8,6 +8,11 @@ local player_strength = 5.0
 local yaw = 0.0
 local pitch = 0.0
 
+local editing_mode = false
+local edit_target = nil
+local edit_radius = 3.0
+local edit_distance = 20.0
+
 function Player.load()
     collider = World.createPlayerCollider(0, 22, 0)
     if lovr.system.setMouseMode then
@@ -20,6 +25,25 @@ function Player.mousemoved(x, y, dx, dy)
     yaw = yaw - dx * sensitivity
     pitch = pitch - dy * sensitivity
     pitch = math.max(-1.4, math.min(1.4, pitch))
+end
+
+local function update_edit_target()
+    if not editing_mode then
+        edit_target = nil
+        return
+    end
+
+    if collider then
+        local x, y, z = collider:getPosition()
+
+        y = y + 0.6
+
+        local dir_x = -math.sin(yaw) * math.cos(pitch)
+        local dir_y = math.sin(pitch)
+        local dir_z = -math.cos(yaw) * math.cos(pitch)
+
+        edit_target = World.getTerrainTarget(x, y, z, dir_x, dir_y, dir_z, edit_distance)
+    end
 end
 
 function Player.update(dt)
@@ -71,14 +95,34 @@ function Player.update(dt)
     end
 
     collider:setLinearVelocity(vx, vy, vz)
+    update_edit_target()
 end
 
 function Player.keypressed(key)
-    if key == 'k' then
-        World.digTerrain(0, 5, -10, 3)
-    elseif key == 'l' then
-        World.addTerrain(0, 5, -10, 3)
+    if key == 'e' then
+        editing_mode = not editing_mode
+        edit_target = nil
     end
+end
+
+function Player.mousepressed(x, y, button)
+    if not editing_mode or not edit_target then
+        return
+    end
+
+    local tx = edit_target.x
+    local ty = edit_target.y
+    local tz = edit_target.z
+
+    if button == 1 then
+        World.digTerrain(tx, ty, tz, edit_radius)
+    elseif button == 2 then
+        World.addTerrain(tx, ty, tz, edit_radius)
+    end
+end
+
+function Player.getEditData()
+    return edit_target, editing_mode, edit_radius
 end
 
 function Player.getData()
