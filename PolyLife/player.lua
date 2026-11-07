@@ -114,6 +114,11 @@ function Player.mousepressed(x, y, button)
     local ty = edit_target.y
     local tz = edit_target.z
 
+    if not World.canEditTerrain(tx, ty, tz, edit_radius) then
+        print("Cannot edit terrain near an object!")
+        return
+    end
+
     if button == 1 then
         World.digTerrain(tx, ty, tz, edit_radius)
     elseif button == 2 then

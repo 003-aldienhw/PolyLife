@@ -576,7 +576,13 @@ local function modify_terrain_sphere(cx, cy, cz, radius, operation)
   end
 
   for _, chunk in pairs(terrain_chunks) do
-    queue_chunks(chunk)
+    local overlaps_x = chunk.x <= max_x and chunk.max_x >= min_x - 1
+    local overlaps_y = chunk.y <= max_y and chunk.max_y >= min_y - 1
+    local overlaps_z = chunk.z <= max_z and chunk.max_z >= min_z - 1
+
+    if overlaps_x and overlaps_y and overlaps_z then
+      queue_chunks(chunk)
+    end
   end
 end
 
@@ -621,6 +627,38 @@ function World.getTerrainTarget(ox, oy, oz, dx, dy, dz, max_distance)
   return target
 end
 
+function World.canEditTerrain(x, y, z, radius)
+  if player_collider then
+    local px, py, pz = player_collider:getPosition()
+
+    local dx = x - px
+    local dy = y - py
+    local dz = z - pz
+
+    local distance = math.sqrt(dx * dx + dy * dy + dz * dz)
+
+    if distance < radius + 0.7 then
+      return false
+    end
+  end
+
+  for _, box in ipairs(box_colliders) do
+    local bx, by, bz = box:getPosition()
+
+    local dx = x - bx
+    local dy = y - by
+    local dz = z - bz
+
+    local distance = math.sqrt(dx * dx + dy * dy + dz * dz)
+
+    if distance < radius + 0.9 then
+      return false
+    end
+  end
+
+  return true
+end
+
 function World.createPlayerCollider(x, y, z)
     player_collider = world:newCapsuleCollider(x, y, z, 0.4, 1.0)
     player_collider:setMass(75.0)
@@ -632,7 +670,6 @@ function World.isPlayerGrounded()
   local x, y, z = player_collider:getPosition()
   local grounded = false
   world:raycast(x, y, z, x, y - 0.6, z, nil, function(collider, shape, hx, hy, hz, nx, ny, nz, tri, fraction)
-
     if collider == player_collider then
       return 1.0
     end
@@ -642,6 +679,7 @@ function World.isPlayerGrounded()
     end
     return 1.0
   end)
+
   return grounded
 end
 
@@ -767,7 +805,7 @@ function World.draw(pass, current_time, cameraPos, underwater, edit_target, edit
 
   if editing_mode and edit_target then
     pass:setColor(0.2, 1.0, 0.3, 0.3)
-    pass:sphere(edit_target.x, edit_target.y, edit_target.z, edit_radius)
+    pass:cube(edit_target.x, edit_target.y, edit_target.z, edit_radius)
     pass:setColor(1, 1, 1, 1)
   end
 end
