@@ -258,7 +258,7 @@ function World.load()
   generate_chunk_data()
   create_terrain_chunks()
 
-  for _, chunk in ipairs(terrain_chunks) do
+  for _, chunk in pairs(terrain_chunks) do
     World.rebuild_chunk(chunk)
   end
 
@@ -370,10 +370,12 @@ function World.load()
       return finalWater;
     }
   ]])
+
   local vertex_format = {
     { 'VertexPosition', 'vec3' },
     { 'VertexColor', 'vec4' }
   }
+
   local raw_water_vertices = generate_water_vertices(water_size, grid_subdivision)
   local formatted_water_vertices = {}
 
@@ -469,7 +471,8 @@ function World.rebuild_chunk(chunk)
                 local avg_y = (pt1[2] + pt2[2] + pt3[2]) / 3.0
                 local avg_z = (pt1[3] + pt2[3] + pt3[3]) / 3.0
                 local r, g, b = get_terrain_color(avg_x, avg_y, avg_z)
-                for _, pt in ipairs({pt1, pt2, pt3}) do
+
+                for _, pt in ipairs({pt1, pt3, pt2}) do
                   table.insert(render_vertices, {pt[1], pt[2], pt[3], r, g, b, 1.0})
                 end
               end
@@ -489,14 +492,14 @@ function World.rebuild_chunk(chunk)
       { 'VertexPosition', 'vec3' },
       { 'VertexColor', 'vec4' }
     }
+
     local pos_format = {
       { 'VertexPosition', 'vec3' }
     }
+
     new_ground_mesh = lovr.graphics.newMesh(color_format, render_vertices)
     new_physics_mesh = lovr.graphics.newMesh(pos_format, physics_vertices)
     new_ground_collider = world:newMeshCollider(new_physics_mesh)
-  else
-    return
   end
 
   local old_collider = chunk.collider
@@ -714,6 +717,8 @@ function World.draw(pass, current_time, cameraPos, underwater)
     end
     pass:cube(x, y, z, 1, angle, ax, ay, az)
   end
+
+  pass:setColor(1, 1, 1, 1)
 
   for _, chunk in pairs(terrain_chunks) do
     if chunk.mesh then
