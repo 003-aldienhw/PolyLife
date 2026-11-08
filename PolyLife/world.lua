@@ -683,6 +683,139 @@ function World.isPlayerGrounded()
   return grounded
 end
 
+local function raycastTerrain(x, y, z, distance)
+  local hit = nil
+
+  world:raycast(x, y, z, x, y - distance, z, nil, function(collider, shape, hx, hy, hz, nx, ny, nz)
+    if collider == player_collider then
+      return 1.0
+    end
+
+    for _, box in ipairs(box_colliders) do
+      if collider == box then
+        return 1.0
+      end
+    end
+
+    hit = {
+      x = hx,
+      y = hy,
+      z = hz,
+      nx = nx,
+      ny = ny,
+      nz = nz
+    }
+
+    return 0.0
+  end)
+
+  return hit
+end
+
+local function findBoxGround(x, y, z)
+  local offsets = {
+    {0, 0},
+    {-0.4, -0.4},
+    {0.4, -0.4},
+    {-0.4, 0.4},
+    {0.4, 0.4},
+  }
+
+  local heights = {}
+
+  for _, offset in ipairs(offsets) do
+    local hit = raycastTerrain(x + offset[1], y + 2.0, z + offset[2], 5.0)
+
+    if not hit then
+      return nil
+    end
+
+    if hit.ny < 0.85 then
+      return nil
+    end
+
+    table.insert(heights, hit.y)
+  end
+
+  local min_height = heights[1]
+  local max_height = heights[1]
+
+  for i = 2, #heights do
+    min_height = math.min(min_height, heights[i])
+    max_height = math.max(max_height, heights[i])
+  end
+
+  if max_height - min_height > 0.25 then
+    return nil
+  end
+
+  return heights[1]
+end
+
+function World.spawnBoxes(ox, oy, oz, dx, dy, dz)
+  if not player_collider then return end
+
+  local max_distance = 20.0
+  local target = nil
+
+  local ex = ox + dx * max_distance
+  local ey = oy + dy * max_distance
+  local ez = oz + dz * max_distance
+
+  world:raycast(ox, oy, oz, ex, ey, ez, nil, function(collider, shape, hx, hy, hz, nx, ny, nz)
+    if collider == player_collider then
+      return 1.0
+    end
+
+    for _, box in ipairs(box_colliders) do
+      if collider == box then
+        return 1.0
+      end
+    end
+
+    target = {
+      x = hx,
+      y = hy,
+      z = hz,
+    }
+
+    return 0.0
+  end)
+
+  if not target then
+    print("No terrain found!")
+    return
+  end
+
+  local ground_y = findBoxGround(target.x, target.y, target.z)
+
+  if not ground_y then
+    print("cannot spawn box here! Surface is not suitable.")
+    return
+  end
+
+  local spawn_y = ground_y + 0.55
+
+  local px, py, pz = player_collider:getPosition()
+
+  local dxp = target.x - px
+  local dzp = target.z - pz
+
+  if dxp * dxp + dzp * dzp < 1.5 * 1.5 then
+    print("Too close to player!")
+    return
+  end
+
+  local collider = world:newBoxCollider(target.x, spawn_y, target.z, 1)
+  local mass = lovr.math.random(1, 40)
+  collider:setMass(mass)
+  collider:setFriction(0.9)
+  collider:setRestitution(0.0)
+  collider:setLinearDamping(0.15)
+  collider:setAngularDamping(0.5)
+  table.insert(box_colliders, collider)
+end
+
 function World.getMovementMultiplier(dx, dz, strength)
   if not player_collider then return 1.0 end
 
@@ -700,21 +833,6 @@ function World.getMovementMultiplier(dx, dz, strength)
 end
 
 function World.update(dt, current_time)
-  if current_time % 1 < dt then
-    local collider = world:newBoxCollider(
-      lovr.math.randomNormal(terrain_size / 10, 0),
-      lovr.math.randomNormal(1, 20),
-      lovr.math.randomNormal(terrain_size / 10, 0),
-      1)
-    local mass = lovr.math.random(1, 40)
-    collider:setMass(mass)
-    collider:setFriction(0.9)
-    collider:setRestitution(0.0)
-    collider:setLinearDamping(0.15)
-    collider:setAngularDamping(0.5)
-    table.insert(box_colliders, collider)
-  end
-
   local fluid_density = 5.0
   local gravity = 9.81
   local box_size = 1.0
@@ -805,7 +923,7 @@ function World.draw(pass, current_time, cameraPos, underwater, edit_target, edit
 
   if editing_mode and edit_target then
     pass:setColor(0.2, 1.0, 0.3, 0.3)
-    pass:cube(edit_target.x, edit_target.y, edit_target.z, edit_radius)
+    pass:sphere(edit_target.x, edit_target.y, edit_target.z, edit_radius)
     pass:setColor(1, 1, 1, 1)
   end
 end

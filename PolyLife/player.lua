@@ -103,6 +103,17 @@ function Player.keypressed(key)
         editing_mode = not editing_mode
         edit_target = nil
     end
+    if key == 'b' then
+        if not collider then return end
+        local x, y, z = collider:getPosition()
+        y = y + 0.6
+
+        local dir_x = -math.sin(yaw) * math.cos(pitch)
+        local dir_y = math.sin(pitch)
+        local dir_z = -math.cos(yaw) * math.cos(pitch)
+
+        World.spawnBoxes(x, y, z, dir_x, dir_y, dir_z)
+    end
 end
 
 function Player.mousepressed(x, y, button)
