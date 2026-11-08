@@ -1,4 +1,5 @@
 local World = require "world"
+local Messages = require "messages"
 local Player = {}
 
 local collider = nil
@@ -126,7 +127,7 @@ function Player.mousepressed(x, y, button)
     local tz = edit_target.z
 
     if not World.canEditTerrain(tx, ty, tz, edit_radius) then
-        print("Cannot edit terrain near an object!")
+        Messages.show("Cannot edit terrain near an object!")
         return
     end
 

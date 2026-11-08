@@ -1,5 +1,6 @@
 local World = require "world"
 local Player = require "player"
+local Messages = require "messages"
 
 function lovr.load()
   World.load()
@@ -10,6 +11,7 @@ function lovr.update(dt)
   local current_time = lovr.timer.getTime()
   World.update(dt, current_time)
   Player.update(dt)
+  Messages.update(dt)
 end
 
 function lovr.mousemoved(x, y, dx, dy)
@@ -44,4 +46,5 @@ function lovr.draw(pass)
   local edit_target, editing_mode, edit_radius = Player.getEditData()
 
   World.draw(pass, current_time, {hx, hy, hz}, underwater, edit_target, editing_mode, edit_radius)
+  Messages.draw(pass, hx, hy, hz, yaw, pitch)
 end

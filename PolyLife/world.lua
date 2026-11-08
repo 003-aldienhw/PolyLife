@@ -1,4 +1,5 @@
 local MC = require "marching_tables"
+local Messages = require "messages"
 local World = {}
 
 local world
@@ -783,14 +784,14 @@ function World.spawnBoxes(ox, oy, oz, dx, dy, dz)
   end)
 
   if not target then
-    print("No terrain found!")
+    Messages.show("No terrain found!")
     return
   end
 
   local ground_y = findBoxGround(target.x, target.y, target.z)
 
   if not ground_y then
-    print("cannot spawn box here! Surface is not suitable.")
+    Messages.show("Cannot spawn box here! Surface is not suitable.")
     return
   end
 
@@ -802,7 +803,7 @@ function World.spawnBoxes(ox, oy, oz, dx, dy, dz)
   local dzp = target.z - pz
 
   if dxp * dxp + dzp * dzp < 1.5 * 1.5 then
-    print("Too close to player!")
+    Messages.show("Too close to player!")
     return
   end
 
@@ -922,11 +923,19 @@ function World.draw(pass, current_time, cameraPos, underwater, edit_target, edit
   pass:setShader()
 
   if editing_mode and edit_target then
-    pass:setColor(0.2, 1.0, 0.3, 0.3)
+    local can_edit = World.canEditTerrain(edit_target.x, edit_target.y, edit_target.z, edit_radius)
+
+    if can_edit then
+      pass:setColor(0.2, 1.0, 0.3, 0.3)
+    else
+      pass:setColor(1.0, 0.1, 0.1, 0.3)
+    end
+
     pass:sphere(edit_target.x, edit_target.y, edit_target.z, edit_radius)
     pass:setColor(1, 1, 1, 1)
   end
 end
 
 function World.getWaterSize() return water_size end
+
 return World
