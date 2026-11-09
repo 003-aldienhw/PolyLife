@@ -7,7 +7,6 @@ local chunk_size = 92
 local chunk_height = 32
 local voxel_scale = 3.0
 local voxel_data = {}
-local terrain_size = 260
 local water_size = 280
 local grid_subdivision = 120
 
@@ -17,6 +16,8 @@ local CHUNK_Y = 16
 local terrain_chunks = {}
 local rebuild_queue = {}
 local rebuild_queue_set = {}
+
+local world_seed = 12345
 
 local master_shader = nil
 local water_mesh = nil
@@ -50,6 +51,10 @@ local function mix_color(a, b, t)
   }
 end
 
+local function seeded_noise(x, z, scale, offset)
+  return lovr.math.noise(x * scale + world_seed + offset, z * scale - world_seed - offset)
+end
+
 local function generate_chunk_data()
   local half_c = chunk_size / 2
   local island_scale = 0.016
@@ -64,19 +69,19 @@ local function generate_chunk_data()
         local wz = (z - half_c) * voxel_scale
         local wy = (y - 16.0) * voxel_scale
 
-        local island_noise = lovr.math.noise(wx * island_scale, wz * island_scale) * 0.75 + lovr.math.noise(wx * island_scale * 2.1 + 31.7, wz * island_scale * 2.1 - 18.4) * 0.25
+        local island_noise = seeded_noise(wx, wz, island_scale, 0) * 0.75 + seeded_noise(wx, wz, island_scale * 2.1, 200) * 0.25
         local sea_level_noise = 0.42
         local beach_slope_width = 0.18
         local dist_from_coast = island_noise - sea_level_noise
         local coast_t = clamp01((dist_from_coast + beach_slope_width) / (beach_slope_width * 2.0))
         local beach_ramp = smooth_step(coast_t)
-        local broad_hills = (lovr.math.noise(wx * broad_scale, wz * broad_scale) - 0.5) * 8.0
-        local medium_hills = (lovr.math.noise(wx * medium_scale + 12.5, wz * medium_scale - 7.3) - 0.5) * 2.5
-        local small_detail = (lovr.math.noise(wx * detail_scale - 21.2, wz * detail_scale + 15.8) - 0.5) * 0.4
+        local broad_hills = (seeded_noise(wx, wz, broad_scale, 100) - 0.5) * 8.0
+        local medium_hills = (seeded_noise(wx, wz, medium_scale, 300) - 0.5) * 2.5
+        local small_detail = (seeded_noise(wx, wz, detail_scale, 400) - 0.5) * 0.4
         local hill_mask = smooth_step(clamp01((coast_t - 0.5) / 0.5))
         local surface_hills = (broad_hills + medium_hills + small_detail) * hill_mask
         local deep_seabed = -4.0
-        local max_land_height = 4.0
+        local max_land_height = 6.0
         local terrain_height = deep_seabed + (max_land_height - deep_seabed) * beach_ramp + surface_hills
 
         local world_edge = (half_c - 0.1) * voxel_scale
