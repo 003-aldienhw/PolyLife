@@ -4,7 +4,6 @@ local Player = {}
 
 local collider = nil
 local current_speed = 6.0
-local sprint_speed = 12.0
 local player_strength = 5.0
 local yaw = 0.0
 local pitch = 0.0
@@ -65,7 +64,13 @@ function Player.update(dt)
     if lovr.system.isKeyDown('d', 'right') then dx = dx + right_x; dz = dz + right_z end
 
     local sprinting = lovr.system.isKeyDown('lshift')
-    local speed = sprinting and sprint_speed or current_speed
+    local walking = lovr.system.isKeyDown('lctrl')
+    local speed = current_speed
+    if sprinting then
+        speed = current_speed + 6
+    elseif walking then
+        speed = current_speed - 3
+    end
 
     local len = math.sqrt(dx * dx + dz * dz)
     if len > 0 then
