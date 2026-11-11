@@ -52,24 +52,6 @@ local function mix_color(a, b, t)
   }
 end
 
-local function create_world_boundaries()
-  local world_width = (chunk_size - 1) * voxel_scale
-  local half = world_width / 2
-  local wall_height = 100
-  local wall_thickness = 4
-
-  local function create_wall(x, z, width, depth)
-    local wall = world:newBoxCollider(x, wall_height / 2, z, width, wall_height, depth)
-    wall:setKinematic(true)
-    table.insert(boundary_colliders, wall)
-  end
-
-  create_wall(-half, 0, wall_thickness, wall_height)
-  create_wall(half, 0, wall_thickness, wall_height)
-  create_wall(0, -half, world_width, wall_thickness)
-  create_wall(0, half, world_width, wall_thickness)
-end
-
 local function seeded_noise(x, z, scale, offset)
   return lovr.math.noise(x * scale + world_seed + offset, z * scale - world_seed - offset)
 end
@@ -280,7 +262,6 @@ function World.load()
   })
 
   world:setGravity(0, -9.81, 0)
-  create_world_boundaries()
   generate_chunk_data()
   create_terrain_chunks()
 
