@@ -64,9 +64,11 @@ function Player.update(dt)
     if lovr.system.isKeyDown('d', 'right') then dx = dx + right_x; dz = dz + right_z end
 
     local sprinting = lovr.system.isKeyDown('lshift')
-    local walking = lovr.system.isKeyDown('lctrl')
+    local walking = lovr.system.isKeyDown('lalt')
     local speed = current_speed
-    if sprinting then
+    if sprinting and walking then
+        speed = current_speed
+    elseif sprinting then
         speed = current_speed + 6
     elseif walking then
         speed = current_speed - 3
