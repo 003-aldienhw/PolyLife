@@ -9,6 +9,15 @@
 
 <p>For further information about LÖVR, visit its official website: https://lovr.org</p>
 
+<h2 align="left">Controls</h2>
+
+- `e`         => Enable/disable terrain editing mode
+- `b`         => Spawn boxes
+- `lshift`    => Sprint
+- `lctrl`     => Walk
+- `esc`       => Show cursor
+- `backspace` => Hide cursor
+
 <h2 align="left">Game Structure</h2>
 
 ```bash
@@ -21,8 +30,12 @@ Polylife
        └── world.lua
        │      │
        │      └── marching_tables.lua
+       │      │
+       │      └── chunk.lua
        │
        └── player.lua
+       │
+       └── messages.lua
 ```
 
 <h2 align="left">How to run (If interested)</h2>
