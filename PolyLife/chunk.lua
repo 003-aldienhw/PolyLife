@@ -1,5 +1,17 @@
 local Chunk = {}
 
+local CHUNK_SIZE_X = 24
+local CHUNK_SIZE_Y = 17
+local CHUNK_SIZE_Z = 24
+
+local function get_voxel_index(x, y, z)
+  if x < 1 or x > CHUNK_SIZE_X or y < 1 or y > CHUNK_SIZE_Y or z < 1 or z > CHUNK_SIZE_Z then
+    return nil
+  end
+
+  return x + (y - 1) * CHUNK_SIZE_X + (z - 1) * CHUNK_SIZE_X * CHUNK_SIZE_Y
+end
+
 local function clamp01(v)
   return math.max(0.0, math.min(1.0, v))
 end
@@ -62,6 +74,22 @@ function Chunk.vertex_interp(p1, p2, val1, val2)
     p1[2] + mu * (p2[2] - p1[2]),
     p1[3] + mu * (p2[3] - p1[3]),
   }
+end
+
+function Chunk.new(cx, cy, cz)
+  local self = {}
+
+  self.cx = cx
+  self.cy = cy
+  self.cz = cz
+
+  self.voxel_data = {}
+
+  self.mesh = nil
+  self.physics_mesh = nil
+  self.collider = nil
+
+  return self
 end
 
 return Chunk
