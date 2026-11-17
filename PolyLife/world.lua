@@ -17,6 +17,7 @@ local CHUNK_Y = 16
 local terrain_chunks = {}
 local rebuild_queue = {}
 local rebuild_queue_set = {}
+local generated_chunks = {}
 
 local world_seed = 12345
 
@@ -125,6 +126,19 @@ local function create_terrain_chunks()
   end
 end
 
+local function create_test_chunks()
+  for cz = -1, 1 do
+    for cy = 0, 1 do
+      for cx = -1, 1 do
+        local chunk = Chunk.new(cx, cy, cz)
+        chunk:generate()
+        local key = cx .. ":" .. cy .. ":" .. cz
+        generated_chunks[key] = chunk
+      end
+    end
+  end
+end
+
 local function create_uniform_grid(size, subs)
   local step = size / (subs - 1)
   local half = size / 2
@@ -207,11 +221,10 @@ function World.load()
   })
 
   world:setGravity(0, -9.81, 0)
-  generate_chunk_data()
-  create_terrain_chunks()
+  create_test_chunks()
 
-  for _, chunk in pairs(terrain_chunks) do
-    World.rebuild_chunk(chunk)
+  for _, chunk in pairs(generated_chunks) do
+    chunk:buildMesh(world)
   end
 
   world:setCallbacks({
@@ -861,7 +874,7 @@ function World.draw(pass, current_time, cameraPos, underwater, edit_target, edit
 
   pass:setColor(1, 1, 1, 1)
 
-  for _, chunk in pairs(terrain_chunks) do
+  for _, chunk in pairs(generated_chunks) do
     if chunk.mesh then
       pass:draw(chunk.mesh)
     end

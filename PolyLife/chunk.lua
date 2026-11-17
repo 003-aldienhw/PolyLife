@@ -1,3 +1,4 @@
+local MC = require "marching_tables"
 local Chunk = {}
 
 local world_seed = 12345
@@ -5,6 +6,9 @@ local world_seed = 12345
 local CHUNK_SIZE_X = 24
 local CHUNK_SIZE_Y = 17
 local CHUNK_SIZE_Z = 24
+local CHUNK_CELLS_X = 23
+local CHUNK_CELLS_Y = 16
+local CHUNK_CELLS_Z = 23
 local voxel_scale = 3.0
 
 local function get_voxel_index(x, y, z)
@@ -92,9 +96,9 @@ function Chunk:generate()
   for z = 1, CHUNK_SIZE_Z do
     for y = 1, CHUNK_SIZE_Y do
       for x = 1, CHUNK_SIZE_X do
-        local global_x = self.cx * 23 + (x - 1)
-        local global_y = self.cy * 16 + (y - 1)
-        local global_z = self.cz * 23 + (z - 1)
+        local global_x = self.cx * CHUNK_CELLS_X + (x - 1)
+        local global_y = self.cy * CHUNK_CELLS_Y + (y - 1)
+        local global_z = self.cz * CHUNK_CELLS_Z + (z - 1)
 
         local wx = global_x * voxel_scale
         local wy = (global_y - 16) * voxel_scale
@@ -126,10 +130,12 @@ end
 
 function Chunk.new(cx, cy, cz)
   local self = {}
+  setmetatable(self, { __index = Chunk})
 
   self.cx = cx
   self.cy = cy
   self.cz = cz
+  self.key = cx .. ":" .. cy .. ":" .. cz
 
   self.voxel_data = {}
 
@@ -138,6 +144,134 @@ function Chunk.new(cx, cy, cz)
   self.collider = nil
 
   return self
+end
+
+function Chunk:buildMesh(physics_world)
+  local render_vertices = {}
+  local physics_vertices = {}
+
+  local corner_offsets = {
+    {0, 0, 0},
+    {1, 0, 0},
+    {1, 0, 1},
+    {0, 0, 1},
+    {0, 1, 0},
+    {1, 1, 0},
+    {1, 1, 1},
+    {0, 1, 1}
+  }
+
+  for z = 1, CHUNK_CELLS_Z do
+    for y = 1, CHUNK_CELLS_Y do
+      for x = 1, CHUNK_CELLS_X do
+        local densities = {}
+        local positions = {}
+
+        for i = 1, 8 do
+          local vx = x + corner_offsets[i][1]
+          local vy = y + corner_offsets[i][2]
+          local vz = z + corner_offsets[i][3]
+
+          local idx = get_voxel_index(vx, vy, vz)
+          assert(idx, "Invalid voxel index")
+          densities[i] = self.voxel_data[idx]
+
+          local global_x = self.cx * CHUNK_CELLS_X + (vx - 1)
+          local global_y = self.cy * CHUNK_CELLS_Y + (vy - 1)
+          local global_z = self.cz * CHUNK_CELLS_Z + (vz - 1)
+
+          positions[i] = {
+            global_x * voxel_scale,
+            (global_y - 16) * voxel_scale,
+            global_z * voxel_scale
+          }
+        end
+
+        local cube_index = 0
+        if densities[1] > 0 then cube_index = cube_index + 1 end
+        if densities[2] > 0 then cube_index = cube_index + 2 end
+        if densities[3] > 0 then cube_index = cube_index + 4 end
+        if densities[4] > 0 then cube_index = cube_index + 8 end
+        if densities[5] > 0 then cube_index = cube_index + 16 end
+        if densities[6] > 0 then cube_index = cube_index + 32 end
+        if densities[7] > 0 then cube_index = cube_index + 64 end
+        if densities[8] > 0 then cube_index = cube_index + 128 end
+
+        if cube_index ~= 0 and cube_index ~= 255 then
+          local tris = MC.tri_table[cube_index + 1]
+
+          if tris then
+            local edge_vertices = {}
+
+            for e = 0, 11 do
+              local edge_info = MC.edge_to_vertices[e]
+
+              if edge_info then
+                local c1 = edge_info[1] + 1
+                local c2 = edge_info[2] + 1
+                edge_vertices[e] = Chunk.vertex_interp(positions[c1], positions[c2], densities[c1], densities[c2])
+              end
+            end
+
+            for i = 1, #tris, 3 do
+              local e1 = tris[i]
+
+              if e1 == -1 or not e1 then break end
+              local e2 = tris[i + 1]
+              local e3 = tris[i + 2]
+              local pt1 = edge_vertices[e1]
+              local pt2 = edge_vertices[e2]
+              local pt3 = edge_vertices[e3]
+
+              if pt1 and pt2 and pt3 then
+                table.insert(physics_vertices, pt1)
+                table.insert(physics_vertices, pt2)
+                table.insert(physics_vertices, pt3)
+
+                local avg_x = (pt1[1] + pt2[1] + pt3[1]) / 3.0
+                local avg_y = (pt1[2] + pt2[2] + pt3[2]) / 3.0
+                local avg_z = (pt1[3] + pt2[3] + pt3[3]) / 3.0
+                local r, g, b = Chunk.get_terrain_color(avg_x, avg_y, avg_z)
+
+                for _, pt in ipairs({pt1, pt3, pt2}) do
+                  table.insert(render_vertices, {pt[1], pt[2], pt[3], r, g, b, 1.0})
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+
+  local new_ground_mesh = nil
+  local new_physics_mesh = nil
+  local new_ground_collider = nil
+
+  if #render_vertices > 0 then
+    local color_format = {
+      { 'VertexPosition', 'vec3' },
+      { 'VertexColor', 'vec4' }
+    }
+
+    local pos_format = {
+      { 'VertexPosition', 'vec3' }
+    }
+
+    new_ground_mesh = lovr.graphics.newMesh(color_format, render_vertices)
+    new_physics_mesh = lovr.graphics.newMesh(pos_format, physics_vertices)
+    new_ground_collider = physics_world:newMeshCollider(new_physics_mesh)
+  end
+
+  local old_collider = self.collider
+
+  self.mesh = new_ground_mesh
+  self.physics_mesh = new_physics_mesh
+  self.collider = new_ground_collider
+
+  if old_collider then
+    old_collider:destroy()
+  end
 end
 
 return Chunk
