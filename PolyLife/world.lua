@@ -14,6 +14,15 @@ local grid_subdivision = 120
 local CHUNK_XZ = 23
 local CHUNK_Y = 16
 
+local CHUNK_CELLS_XZ = 23
+local CHUNK_WORLD_SIZE = CHUNK_CELLS_XZ * voxel_scale
+
+local LOAD_RADIUS = 2
+local UNLOAD_RADIUS = 3
+
+local last_player_chunk_x = nil
+local last_player_chunk_z = nil
+
 local terrain_chunks = {}
 local rebuild_queue = {}
 local rebuild_queue_set = {}
@@ -126,15 +135,69 @@ local function create_terrain_chunks()
   end
 end
 
-local function create_test_chunks()
-  for cz = -1, 1 do
-    for cy = 0, 1 do
-      for cx = -1, 1 do
-        local chunk = Chunk.new(cx, cy, cz)
-        chunk:generate()
-        local key = cx .. ":" .. cy .. ":" .. cz
-        generated_chunks[key] = chunk
+local function get_chunk_key(cx, cy, cz)
+  return cx .. ":" .. cy .. ":" .. cz
+end
+
+local function load_chunk(cx, cy, cz)
+  local key = get_chunk_key(cx, cy, cz)
+
+  if generated_chunks[key] then
+    return
+  end
+
+  local chunk = Chunk.new(cx, cy, cz)
+  chunk:generate()
+  chunk:buildMesh(world)
+
+  generated_chunks[key] = chunk
+end
+
+local function unload_chunk(key)
+  local chunk = generated_chunks[key]
+
+  if not chunk then
+    return
+  end
+
+  if chunk.collider then
+    chunk.collider:destroy()
+  end
+
+  generated_chunks[key] = nil
+end
+
+local function update_chunk_streaming()
+  if not player_collider then
+    return
+  end
+
+  local px, py, pz = player_collider:getPosition()
+
+  local player_chunk_x = math.floor(px / CHUNK_WORLD_SIZE)
+  local player_chunk_z = math.floor(pz / CHUNK_WORLD_SIZE)
+
+  if player_chunk_x == last_player_chunk_x and player_chunk_z == last_player_chunk_z then
+    return
+  end
+
+  last_player_chunk_x = player_chunk_x
+  last_player_chunk_z = player_chunk_z
+
+  for cz = player_chunk_z - LOAD_RADIUS, player_chunk_z + LOAD_RADIUS do
+    for cx = player_chunk_x - LOAD_RADIUS, player_chunk_x + LOAD_RADIUS do
+      for cy = 0, 1 do
+        load_chunk(cx, cy, cz)
       end
+    end
+  end
+
+  for key, chunk in pairs(generated_chunks) do
+    local dx = chunk.cx - player_chunk_x
+    local dz = chunk.cz - player_chunk_z
+
+    if math.abs(dx) > UNLOAD_RADIUS or math.abs(dz) > UNLOAD_RADIUS then
+      unload_chunk(key)
     end
   end
 end
@@ -221,11 +284,6 @@ function World.load()
   })
 
   world:setGravity(0, -9.81, 0)
-  create_test_chunks()
-
-  for _, chunk in pairs(generated_chunks) do
-    chunk:buildMesh(world)
-  end
 
   world:setCallbacks({
     contact = function (a, b, contact)
@@ -850,6 +908,7 @@ function World.update(dt, current_time)
 
   player_contact_boxes = {}
   process_rebuild_queue()
+  update_chunk_streaming()
   world:update(dt)
 end
 
