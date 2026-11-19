@@ -27,6 +27,11 @@ local terrain_chunks = {}
 local rebuild_queue = {}
 local rebuild_queue_set = {}
 local generated_chunks = {}
+local generation_queue = {}
+local generation_queue_set = {}
+local generation_queue_head = 1
+
+local CHUNKS_PER_FRAME = 1
 
 local world_seed = 12345
 
@@ -139,18 +144,43 @@ local function get_chunk_key(cx, cy, cz)
   return cx .. ":" .. cy .. ":" .. cz
 end
 
-local function load_chunk(cx, cy, cz)
+local function queue_chunk(cx, cy, cz)
   local key = get_chunk_key(cx, cy, cz)
 
-  if generated_chunks[key] then
+  if generated_chunks[key] or generation_queue_set[key] then
     return
   end
 
-  local chunk = Chunk.new(cx, cy, cz)
-  chunk:generate()
-  chunk:buildMesh(world)
+  generation_queue_set[key] = true
 
-  generated_chunks[key] = chunk
+  table.insert(generation_queue, {cx = cx, cy = cy, cz = cz, key = key})
+end
+
+local function process_generation_queue()
+  for i = 1, CHUNKS_PER_FRAME do
+    local request = generation_queue[generation_queue_head]
+
+    if not request then
+      break
+    end
+
+    generation_queue[generation_queue_head] = nil
+    generation_queue_head = generation_queue_head + 1
+
+    generation_queue_set[request.key] = nil
+
+    local chunk = Chunk.new(request.cx, request.cy, request.cz)
+
+    chunk:generate()
+    chunk:buildMesh(world)
+
+    generated_chunks[request.key] = chunk
+  end
+
+  if generation_queue_head > #generation_queue then
+    generation_queue = {}
+    generation_queue_head = 1
+  end
 end
 
 local function unload_chunk(key)
@@ -187,7 +217,7 @@ local function update_chunk_streaming()
   for cz = player_chunk_z - LOAD_RADIUS, player_chunk_z + LOAD_RADIUS do
     for cx = player_chunk_x - LOAD_RADIUS, player_chunk_x + LOAD_RADIUS do
       for cy = 0, 1 do
-        load_chunk(cx, cy, cz)
+        queue_chunk(cx, cy, cz)
       end
     end
   end
@@ -909,6 +939,7 @@ function World.update(dt, current_time)
   player_contact_boxes = {}
   process_rebuild_queue()
   update_chunk_streaming()
+  process_generation_queue()
   world:update(dt)
 end
 
