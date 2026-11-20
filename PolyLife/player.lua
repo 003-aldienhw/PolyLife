@@ -80,6 +80,15 @@ function Player.update(dt)
 
         local multiplier = World.getMovementMultiplier(dx, dz, player_strength)
         dx, dz = dx * speed * multiplier, dz * speed * multiplier
+
+        local check_distance = 1.0
+        local target_x = px + (dx / speed) * check_distance
+        local target_z = pz + (dz / speed) * check_distance
+
+        if not World.isChunkReadyAt(target_x, target_z) then
+            dx, dz = 0, 0
+            vx, vz = 0, 0
+        end
     end
 
     local smoothing = 12.0

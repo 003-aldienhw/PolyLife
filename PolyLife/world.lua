@@ -28,8 +28,7 @@ local rebuild_queue = {}
 local rebuild_queue_set = {}
 local generated_chunks = {}
 local generation_queue = {}
-local generation_queue_set = {}
-local generation_queue_head = 1
+local generation_queue_count = 0
 
 local CHUNKS_PER_FRAME = 1
 
@@ -147,39 +146,56 @@ end
 local function queue_chunk(cx, cy, cz)
   local key = get_chunk_key(cx, cy, cz)
 
-  if generated_chunks[key] or generation_queue_set[key] then
+  if generated_chunks[key] or generation_queue[key] then
     return
   end
 
-  generation_queue_set[key] = true
-
-  table.insert(generation_queue, {cx = cx, cy = cy, cz = cz, key = key})
+  generation_queue[key] = {cx = cx, cy = cy, cz = cz, key = key}
+  generation_queue_count = generation_queue_count + 1
 end
 
 local function process_generation_queue()
-  for i = 1, CHUNKS_PER_FRAME do
-    local request = generation_queue[generation_queue_head]
+  if not player_collider then return end
 
-    if not request then
+  local px, py, pz = player_collider:getPosition()
+  local pcx = math.floor(px / CHUNK_WORLD_SIZE)
+  local pcz = math.floor(pz / CHUNK_WORLD_SIZE)
+
+  for _ = 1, CHUNKS_PER_FRAME do
+    local best_request = nil
+    local best_key = nil
+    local best_distance = math.huge
+
+    for key, request in pairs(generation_queue) do
+      local dx = request.cx - pcx
+      local dz = request.cz - pcz
+
+      if math.abs(dx) > LOAD_RADIUS or math.abs(dz) > LOAD_RADIUS then
+        generation_queue[key] = nil
+        generation_queue_count = generation_queue_count - 1
+      else
+        local distance = dx * dx + dz * dz
+
+        if distance < best_distance then
+          best_distance = distance
+          best_request = request
+          best_key = key
+        end
+      end
+    end
+
+    if not best_request then
       break
     end
 
-    generation_queue[generation_queue_head] = nil
-    generation_queue_head = generation_queue_head + 1
+    generation_queue[best_key] = nil
+    generation_queue_count = generation_queue_count - 1
 
-    generation_queue_set[request.key] = nil
-
-    local chunk = Chunk.new(request.cx, request.cy, request.cz)
-
+    local chunk = Chunk.new(best_request.cx, best_request.cy, best_request.cz)
     chunk:generate()
     chunk:buildMesh(world)
-
-    generated_chunks[request.key] = chunk
-  end
-
-  if generation_queue_head > #generation_queue then
-    generation_queue = {}
-    generation_queue_head = 1
+    
+    generated_chunks[best_key] = chunk
   end
 end
 
@@ -230,6 +246,21 @@ local function update_chunk_streaming()
       unload_chunk(key)
     end
   end
+end
+
+function World.isChunkReadyAt(x, z)
+  local cx = math.floor(x / CHUNK_WORLD_SIZE)
+  local cz = math.floor(z / CHUNK_WORLD_SIZE)
+
+  for cy = 0, 1 do
+    local key = get_chunk_key(cx, cy, cz)
+
+    if not generated_chunks[key] then
+      return false
+    end
+  end
+
+  return true
 end
 
 local function create_uniform_grid(size, subs)
@@ -713,9 +744,29 @@ function World.canEditTerrain(x, y, z, radius)
 end
 
 function World.createPlayerCollider(x, y, z)
-    player_collider = world:newCapsuleCollider(x, y, z, 0.4, 1.0)
-    player_collider:setMass(75.0)
-    return player_collider
+  local cx = math.floor(x / CHUNK_WORLD_SIZE)
+  local cz = math.floor(z / CHUNK_WORLD_SIZE)
+
+  for cy = 0, 1 do
+    local key = get_chunk_key(cx, cy, cz)
+
+    if not generated_chunks[key] then
+      local chunk = Chunk.new(cx, cy, cz)
+      chunk:generate()
+      chunk:buildMesh(world)
+
+      generated_chunks[key] = chunk
+    end
+
+    if generation_queue[key] then
+      generated_chunks[key] = nil
+      generation_queue_count = generation_queue_count - 1
+    end
+  end
+
+  player_collider = world:newCapsuleCollider(x, y, z, 0.4, 1.0)
+  player_collider:setMass(75.0)
+  return player_collider
 end
 
 function World.isPlayerGrounded()
