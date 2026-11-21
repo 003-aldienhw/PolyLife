@@ -1,18 +1,11 @@
-local MC = require "marching_tables"
 local Chunk = require "chunk"
 local Messages = require "messages"
 local World = {}
 
 local world
-local chunk_size = 92
-local chunk_height = 32
 local voxel_scale = 3.0
-local voxel_data = {}
 local water_size = 280
 local grid_subdivision = 120
-
-local CHUNK_XZ = 23
-local CHUNK_Y = 16
 
 local CHUNK_CELLS_XZ = 23
 local CHUNK_WORLD_SIZE = CHUNK_CELLS_XZ * voxel_scale
@@ -23,7 +16,6 @@ local UNLOAD_RADIUS = 3
 local last_player_chunk_x = nil
 local last_player_chunk_z = nil
 
-local terrain_chunks = {}
 local rebuild_queue = {}
 local rebuild_queue_set = {}
 local generated_chunks = {}
@@ -32,112 +24,11 @@ local generation_queue_count = 0
 
 local CHUNKS_PER_FRAME = 1
 
-local world_seed = 12345
-
 local master_shader = nil
 local water_mesh = nil
 local box_colliders = {}
 local player_collider = nil
 local player_contact_boxes = {}
-
-local function get_voxel_index(x, y, z)
-  if x < 1 or x > chunk_size or y < 1 or y > chunk_height or z < 1 or z > chunk_size then
-    return nil
-  end
-  return x + (y - 1) * chunk_size + (z - 1) * chunk_size * chunk_height
-end
-
-local function clamp01(v)
-  return math.max(0.0, math.min(1.0, v))
-end
-
-local function smooth_step(t)
-  t = clamp01(t)
-  return t * t * (3.0 - 2.0 * t)
-end
-
-local function seeded_noise(x, z, scale, offset)
-  return lovr.math.noise(x * scale + world_seed + offset, z * scale - world_seed - offset)
-end
-
-local function generate_chunk_data()
-  local half_c = chunk_size / 2
-  local island_scale = 0.016
-  local broad_scale = 0.015
-  local medium_scale = 0.04
-  local detail_scale = 0.08
-
-  for z = 1, chunk_size do
-    for y = 1, chunk_height do
-      for x = 1, chunk_size do
-        local wx = (x - half_c) * voxel_scale
-        local wz = (z - half_c) * voxel_scale
-        local wy = (y - 16.0) * voxel_scale
-
-        local island_noise = seeded_noise(wx, wz, island_scale, 0) * 0.75 + seeded_noise(wx, wz, island_scale * 2.1, 200) * 0.25
-        local sea_level_noise = 0.42
-        local beach_slope_width = 0.18
-        local dist_from_coast = island_noise - sea_level_noise
-        local coast_t = clamp01((dist_from_coast + beach_slope_width) / (beach_slope_width * 2.0))
-        local beach_ramp = smooth_step(coast_t)
-        local broad_hills = (seeded_noise(wx, wz, broad_scale, 100) - 0.5) * 8.0
-        local medium_hills = (seeded_noise(wx, wz, medium_scale, 300) - 0.5) * 2.5
-        local small_detail = (seeded_noise(wx, wz, detail_scale, 400) - 0.5) * 0.4
-        local hill_mask = smooth_step(clamp01((coast_t - 0.5) / 0.5))
-        local surface_hills = (broad_hills + medium_hills + small_detail) * hill_mask
-        local deep_seabed = -4.0
-        local max_land_height = 6.0
-        local terrain_height = deep_seabed + (max_land_height - deep_seabed) * beach_ramp + surface_hills
-
-        local world_edge = (half_c - 0.1) * voxel_scale
-        local boundary_distance = math.min(wx + world_edge, world_edge - wx, wz + world_edge, world_edge - wz)
-        local transition_width = 60.0
-        local edge_t = clamp01(boundary_distance / transition_width)
-        local map_deep_seabed = -20.0
-        terrain_height = map_deep_seabed + (terrain_height - map_deep_seabed) * edge_t
-
-        local density = terrain_height - wy
-        local idx = get_voxel_index(x, y, z)
-
-        if idx then voxel_data[idx] = density end
-      end
-    end
-  end
-end
-
-local function create_terrain_chunks()
-  local cells_x = chunk_size - 1
-  local cells_y = chunk_height - 1
-  local cells_z = chunk_size - 1
-
-  local count_x = math.ceil(cells_x / CHUNK_XZ)
-  local count_y = math.ceil(cells_y / CHUNK_Y)
-  local count_z = math.ceil(cells_z / CHUNK_XZ)
-
-  for cz = 1, count_z do
-    for cy = 1, count_y do
-      for cx = 1, count_x do
-        local chunk = {
-          x = (cx - 1) * CHUNK_XZ + 1,
-          y = (cy - 1) * CHUNK_Y + 1,
-          z = (cz - 1) * CHUNK_XZ + 1,
-
-          max_x = math.min(cx * CHUNK_XZ, cells_x),
-          max_y = math.min(cy * CHUNK_Y, cells_y),
-          max_z = math.min(cz * CHUNK_XZ, cells_z),
-
-          mesh = nil,
-          physics_mesh = nil,
-          collider = nil
-        }
-
-        chunk.key = cx .. ":" .. cy .. ":" .. cz
-
-        terrain_chunks[chunk.key] = chunk
-      end
-    end
-  end
-end
 
 local function get_chunk_key(cx, cy, cz)
   return cx .. ":" .. cy .. ":" .. cz
@@ -188,13 +79,17 @@ local function process_generation_queue()
       break
     end
 
+    if not best_key then
+      break
+    end
+
     generation_queue[best_key] = nil
     generation_queue_count = generation_queue_count - 1
 
     local chunk = Chunk.new(best_request.cx, best_request.cy, best_request.cz)
     chunk:generate()
     chunk:buildMesh(world)
-    
+
     generated_chunks[best_key] = chunk
   end
 end
@@ -471,138 +366,12 @@ function World.load()
   water_mesh = lovr.graphics.newMesh(vertex_format, formatted_water_vertices)
 end
 
-function World.rebuild_chunk(chunk)
-  local render_vertices = {}
-  local physics_vertices = {}
-
-  local corner_offsets = {
-    {0, 0, 0},
-    {1, 0, 0},
-    {1, 0, 1},
-    {0, 0, 1},
-    {0, 1, 0},
-    {1, 1, 0},
-    {1, 1, 1},
-    {0, 1, 1}
-  }
-
-  local half_x = chunk_size / 2
-  local half_z = chunk_size / 2
-  local surface_level = 16.0
-
-  for z = chunk.z, chunk.max_z do
-    for y = chunk.y, chunk.max_y do
-      for x = chunk.x, chunk.max_x do
-        local densities = {}
-        local positions = {}
-
-        for i = 1, 8 do
-          local cx = x + corner_offsets[i][1]
-          local cy = y + corner_offsets[i][2]
-          local cz = z + corner_offsets[i][3]
-          local idx = get_voxel_index(cx, cy, cz)
-          assert(idx, "Invalid voxel index")
-          densities[i] = voxel_data[idx]
-          positions[i] = {
-            (cx - half_x) * voxel_scale,
-            (cy - surface_level) * voxel_scale,
-            (cz - half_z) * voxel_scale
-          }
-        end
-
-        local cube_index = 0
-        if densities[1] > 0 then cube_index = cube_index + 1 end
-        if densities[2] > 0 then cube_index = cube_index + 2 end
-        if densities[3] > 0 then cube_index = cube_index + 4 end
-        if densities[4] > 0 then cube_index = cube_index + 8 end
-        if densities[5] > 0 then cube_index = cube_index + 16 end
-        if densities[6] > 0 then cube_index = cube_index + 32 end
-        if densities[7] > 0 then cube_index = cube_index + 64 end
-        if densities[8] > 0 then cube_index = cube_index + 128 end
-
-        if cube_index ~= 0 and cube_index ~= 255 then
-          local tris = MC.tri_table[cube_index + 1]
-
-          if tris then
-            local edge_vertices = {}
-
-            for e = 0, 11 do
-              local edge_info = MC.edge_to_vertices[e]
-
-              if edge_info then
-                local c1 = edge_info[1] + 1
-                local c2 = edge_info[2] + 1
-                edge_vertices[e] = Chunk.vertex_interp(positions[c1], positions[c2], densities[c1], densities[c2])
-              end
-            end
-
-            for i = 1, #tris, 3 do
-              local e1 = tris[i]
-
-              if e1 == -1 or not e1 then break end
-              local e2 = tris[i + 1]
-              local e3 = tris[i + 2]
-              local pt1 = edge_vertices[e1]
-              local pt2 = edge_vertices[e2]
-              local pt3 = edge_vertices[e3]
-
-              if pt1 and pt2 and pt3 then
-                table.insert(physics_vertices, pt1)
-                table.insert(physics_vertices, pt2)
-                table.insert(physics_vertices, pt3)
-
-                local avg_x = (pt1[1] + pt2[1] + pt3[1]) / 3.0
-                local avg_y = (pt1[2] + pt2[2] + pt3[2]) / 3.0
-                local avg_z = (pt1[3] + pt2[3] + pt3[3]) / 3.0
-                local r, g, b = Chunk.get_terrain_color(avg_x, avg_y, avg_z)
-
-                for _, pt in ipairs({pt1, pt3, pt2}) do
-                  table.insert(render_vertices, {pt[1], pt[2], pt[3], r, g, b, 1.0})
-                end
-              end
-            end
-          end
-        end
-      end
-    end
-  end
-
-  local new_ground_mesh = nil
-  local new_physics_mesh = nil
-  local new_ground_collider = nil
-
-  if #render_vertices > 0 then
-    local color_format = {
-      { 'VertexPosition', 'vec3' },
-      { 'VertexColor', 'vec4' }
-    }
-
-    local pos_format = {
-      { 'VertexPosition', 'vec3' }
-    }
-
-    new_ground_mesh = lovr.graphics.newMesh(color_format, render_vertices)
-    new_physics_mesh = lovr.graphics.newMesh(pos_format, physics_vertices)
-    new_ground_collider = world:newMeshCollider(new_physics_mesh)
-  end
-
-  local old_collider = chunk.collider
-
-  chunk.mesh = new_ground_mesh
-  chunk.physics_mesh = new_physics_mesh
-  chunk.collider = new_ground_collider
-
-  if old_collider then
-    old_collider:destroy()
-  end
-end
-
-local function queue_chunks(chunk)
+local function queue_chunk_rebuild(chunk)
   if rebuild_queue_set[chunk.key] then
     return
   end
 
-  rebuild_queue_set[chunk.key] = true
+  rebuild_queue_set[chunk.key] = chunk
   table.insert(rebuild_queue, chunk)
 end
 
@@ -616,66 +385,32 @@ local function process_rebuild_queue()
       break
     end
 
-    rebuild_queue_set[chunk.key] = nil
-    World.rebuild_chunk(chunk)
+    if rebuild_queue_set[chunk.key] == chunk then
+      rebuild_queue_set[chunk.key] = nil
+    end
+
+    if generated_chunks[chunk.key] == chunk then
+      chunk:buildMesh(world)
+    end
   end
 end
 
-local function modify_terrain_sphere(cx, cy, cz, radius, operation)
-  local half_x = chunk_size / 2
-  local half_z = chunk_size / 2
-  local surface_level = 16.0
+local function modify_terrain_cube(cx, cy, cz, radius, amount)
+  for _, chunk in pairs(generated_chunks) do
+    local changed = chunk:editVoxel(cx, cy, cz, radius, amount)
 
-  local min_x = math.max(1, math.floor(cx / voxel_scale + half_x - radius / voxel_scale) - 1)
-  local max_x = math.min(chunk_size, math.ceil(cx / voxel_scale + half_x + radius / voxel_scale) + 1)
-  local min_y = math.max(1, math.floor(cy / voxel_scale + surface_level - radius / voxel_scale) - 1)
-  local max_y = math.min(chunk_height, math.ceil(cy / voxel_scale + surface_level + radius / voxel_scale) + 1)
-  local min_z = math.max(1, math.floor(cz / voxel_scale + half_x - radius / voxel_scale) - 1)
-  local max_z = math.min(chunk_size, math.ceil(cz / voxel_scale + half_x + radius / voxel_scale) + 1)
-
-  for z = min_z, max_z do
-    for y = min_y, max_y do
-      for x = min_x, max_x do
-        local wx = (x - half_x) * voxel_scale
-        local wy = (y - surface_level) * voxel_scale
-        local wz = (z - half_z) * voxel_scale
-
-        local dx = wx - cx
-        local dy = wy - cy
-        local dz = wz - cz
-
-        local distance = math.sqrt(dx * dx + dy * dy + dz * dz)
-        if distance < radius then
-          local idx = get_voxel_index(x, y, z)
-          local density = voxel_data[idx]
-
-          if operation == "dig" then
-            if idx then voxel_data[idx] = math.min(density, distance - radius) end
-          elseif operation == "add" then
-            if idx then voxel_data[idx] = math.max(density, radius - distance) end
-          end
-        end
-      end
-    end
-  end
-
-  for _, chunk in pairs(terrain_chunks) do
-    local overlaps_x = chunk.x <= max_x and chunk.max_x >= min_x - 1
-    local overlaps_y = chunk.y <= max_y and chunk.max_y >= min_y - 1
-    local overlaps_z = chunk.z <= max_z and chunk.max_z >= min_z - 1
-
-    if overlaps_x and overlaps_y and overlaps_z then
-      queue_chunks(chunk)
+    if changed then
+      queue_chunk_rebuild(chunk)
     end
   end
 end
 
 function World.digTerrain(x, y, z, radius)
-  modify_terrain_sphere(x, y, z, radius, "dig")
+  modify_terrain_cube(x, y, z, radius, -3.0)
 end
 
 function World.addTerrain(x, y, z, radius)
-  modify_terrain_sphere(x, y, z, radius, "add")
+  modify_terrain_cube(x, y, z, radius, 3.0)
 end
 
 function World.getTerrainTarget(ox, oy, oz, dx, dy, dz, max_distance)
@@ -759,13 +494,14 @@ function World.createPlayerCollider(x, y, z)
     end
 
     if generation_queue[key] then
-      generated_chunks[key] = nil
+      generation_queue[key] = nil
       generation_queue_count = generation_queue_count - 1
     end
   end
 
   player_collider = world:newCapsuleCollider(x, y, z, 0.4, 1.0)
   player_collider:setMass(75.0)
+
   return player_collider
 end
 
@@ -1036,7 +772,7 @@ function World.draw(pass, current_time, cameraPos, underwater, edit_target, edit
       pass:setColor(1.0, 0.1, 0.1, 0.3)
     end
 
-    pass:sphere(edit_target.x, edit_target.y, edit_target.z, edit_radius)
+    pass:cube(edit_target.x, edit_target.y, edit_target.z, edit_radius * 2)
     pass:setColor(1, 1, 1, 1)
   end
 end

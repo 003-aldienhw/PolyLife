@@ -146,6 +146,36 @@ function Chunk.new(cx, cy, cz)
   return self
 end
 
+function Chunk:editVoxel(center_x, center_y, center_z, radius, amount)
+  local changed = false
+
+  for z = 1, CHUNK_SIZE_Z do
+    for y = 1, CHUNK_SIZE_Y do
+      for x = 1, CHUNK_SIZE_X do
+        local global_x = self.cx * CHUNK_CELLS_X + (x - 1)
+        local global_y = self.cy * CHUNK_CELLS_Y + (y - 1)
+        local global_z = self.cz * CHUNK_CELLS_Z + (z - 1)
+
+        local wx = global_x * voxel_scale
+        local wy = (global_y - 16) * voxel_scale
+        local wz = global_z * voxel_scale
+
+        if math.abs(wx - center_x) <= radius
+        and math.abs(wy - center_y) <= radius
+        and math.abs(wz - center_z) <= radius then
+          local idx = get_voxel_index(x, y, z)
+
+          if idx then self.voxel_data[idx] = self.voxel_data[idx] + amount end
+
+          changed = true
+        end
+      end
+    end
+  end
+
+  return changed
+end
+
 function Chunk:buildMesh(physics_world)
   local render_vertices = {}
   local physics_vertices = {}

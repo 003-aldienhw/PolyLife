@@ -10,7 +10,7 @@ local pitch = 0.0
 
 local editing_mode = false
 local edit_target = nil
-local edit_radius = 3.0
+local edit_radius = 2.0
 local edit_distance = 20.0
 
 function Player.load()
